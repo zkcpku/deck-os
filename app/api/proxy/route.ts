@@ -1,5 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+// Handle CORS preflight requests
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400',
+    },
+  })
+}
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
@@ -150,6 +163,81 @@ export async function GET(request: NextRequest) {
               document.addEventListener('blur', (e) => {
                 captureEvent('blur', e.target, {});
               }, true);
+              
+              // Intercept fetch requests to route through proxy
+              const originalFetch = window.fetch;
+              const proxyOrigin = window.parent.location.origin; // Get the parent frame's origin (our app)
+              
+              window.fetch = function(url, options) {
+                // Skip if already going through proxy
+                if (typeof url === 'string' && url.includes('/api/proxy')) {
+                  return originalFetch.apply(this, arguments);
+                }
+                
+                // Convert relative URLs to absolute
+                let targetUrl = url;
+                if (typeof url === 'string') {
+                  // Handle different URL formats
+                  if (url.startsWith('//')) {
+                    targetUrl = window.location.protocol + url;
+                  } else if (url.startsWith('/')) {
+                    // Get the real origin from the page, not the proxy origin
+                    const baseElement = document.querySelector('base');
+                    const realOrigin = baseElement ? new URL(baseElement.href).origin : '${baseUrl}';
+                    targetUrl = realOrigin + url;
+                  } else if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                    // Relative URL - resolve against current page URL
+                    const baseElement = document.querySelector('base');
+                    const baseUrl = baseElement ? baseElement.href : '${baseUrl}/';
+                    targetUrl = new URL(url, baseUrl).href;
+                  }
+                  
+                  // Always proxy external requests through our server
+                  if (!targetUrl.startsWith(proxyOrigin)) {
+                    // Use the parent window's origin for the proxy
+                    return originalFetch(proxyOrigin + '/api/proxy?url=' + encodeURIComponent(targetUrl), {
+                      ...options,
+                      mode: 'cors',
+                      credentials: 'omit'
+                    });
+                  }
+                }
+                return originalFetch.apply(this, arguments);
+              };
+              
+              // Also intercept XMLHttpRequest
+              const originalXhrOpen = XMLHttpRequest.prototype.open;
+              XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
+                // Skip if already going through proxy
+                if (typeof url === 'string' && url.includes('/api/proxy')) {
+                  return originalXhrOpen.call(this, method, url, async, user, password);
+                }
+                
+                let targetUrl = url;
+                if (typeof url === 'string') {
+                  // Handle different URL formats
+                  if (url.startsWith('//')) {
+                    targetUrl = window.location.protocol + url;
+                  } else if (url.startsWith('/')) {
+                    // Get the real origin from the page, not the proxy origin
+                    const baseElement = document.querySelector('base');
+                    const realOrigin = baseElement ? new URL(baseElement.href).origin : '${baseUrl}';
+                    targetUrl = realOrigin + url;
+                  } else if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                    // Relative URL - resolve against current page URL
+                    const baseElement = document.querySelector('base');
+                    const baseUrl = baseElement ? baseElement.href : '${baseUrl}/';
+                    targetUrl = new URL(url, baseUrl).href;
+                  }
+                  
+                  // Always proxy external requests through our server
+                  if (!targetUrl.startsWith(proxyOrigin)) {
+                    // Use the parent window's origin for the proxy
+                    targetUrl = proxyOrigin + '/api/proxy?url=' + encodeURIComponent(targetUrl);
+                  }
+                }
+                return originalXhrOpen.call(this, method, targetUrl, async, user, password);
+              };
             })();
           </script>
         `;
@@ -176,12 +264,27 @@ export async function GET(request: NextRequest) {
         })
       }
       
-      // For other content types, return as-is
+      // For JSON/API responses, add CORS headers
+      if (contentType.includes('application/json')) {
+        const content = await response.text()
+        return new NextResponse(content, {
+          status: response.status,
+          headers: {
+            'Content-Type': contentType,
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          }
+        })
+      }
+      
+      // For other content types, return as-is with CORS headers
       const content = await response.arrayBuffer()
       return new NextResponse(content, {
         status: response.status,
         headers: {
           'Content-Type': contentType,
+          'Access-Control-Allow-Origin': '*',
           'X-Frame-Options': 'SAMEORIGIN',
           'X-Content-Type-Options': 'nosniff'
         }
