@@ -3,14 +3,18 @@
 import { Card } from '@/components/card'
 import { cn } from '@/lib/utils'
 import { Copy } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react'
 import '@xterm/xterm/css/xterm.css'
 
 interface TerminalProps {
   className?: string
 }
 
-export function Terminal({ className }: TerminalProps) {
+export interface TerminalRef {
+  getTerminalContent: () => string
+}
+
+export const Terminal = forwardRef<TerminalRef, TerminalProps>(({ className }, ref) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<any>(null)
   const fitAddonRef = useRef<any>(null)
@@ -18,6 +22,66 @@ export function Terminal({ className }: TerminalProps) {
   const [sessionId] = useState(() => Math.random().toString(36).substring(7))
   const [isConnected, setIsConnected] = useState(false)
   const [isLoaded, setIsLoaded] = useState(false)
+
+  // Expose methods to parent component
+  useImperativeHandle(ref, () => ({
+    getTerminalContent: () => {
+      if (!xtermRef.current) return ''
+
+      try {
+        const term = xtermRef.current
+        
+        // Method 1: Use selectAll and getSelection for most reliable results
+        term.selectAll()
+        const selection = term.getSelection()
+        term.clearSelection()
+        
+        if (selection && selection.trim()) {
+          // Clean up the content: remove excessive empty lines and clean formatting
+          const cleanedContent = selection
+            .replace(/\r\n/g, '\n')  // Normalize line endings
+            .replace(/\n\s*\n\s*\n/g, '\n\n')  // Remove excessive empty lines
+            .trim()
+          
+          return cleanedContent
+        }
+        
+        // Method 2: Fallback to manual buffer reading if selection fails
+        let terminalContent = ''
+        const buffer = term.buffer.normal
+        const scrollbackSize = buffer.length
+        const viewportSize = term.rows
+        
+        // Get scrollback content first
+        for (let i = 0; i < scrollbackSize; i++) {
+          const line = buffer.getLine(i)
+          if (line) {
+            terminalContent += line.translateToString(true) + '\n'
+          }
+        }
+        
+        // Then get current viewport content
+        for (let i = 0; i < viewportSize; i++) {
+          const line = buffer.getLine(scrollbackSize + i)
+          if (line) {
+            terminalContent += line.translateToString(true) + '\n'
+          }
+        }
+        
+        // Clean up the content
+        terminalContent = terminalContent
+          .replace(/\r\n/g, '\n')
+          .replace(/\n\s*\n\s*\n/g, '\n\n')
+          .trim()
+        
+        return terminalContent
+        
+      } catch (err) {
+        console.error('Failed to get terminal content:', err)
+        return ''
+      }
+    }
+  }))
 
   useEffect(() => {
     // Dynamically import xterm modules only on client side
@@ -239,4 +303,6 @@ export function Terminal({ className }: TerminalProps) {
       <div ref={terminalRef} className="flex-1 p-2 bg-[#1e1e1e] overflow-auto" />
     </Card>
   )
-}
+})
+
+Terminal.displayName = 'Terminal'
