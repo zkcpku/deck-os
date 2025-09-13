@@ -1,8 +1,4 @@
 import { NuqsAdapter } from 'nuqs/adapters/next/app'
-import { ChatProvider } from '@/lib/chat-context'
-import { CommandLogsStream } from '@/components/commands-logs/commands-logs-stream'
-import { ErrorMonitor } from '@/components/error-monitor/error-monitor'
-import { SandboxState } from '@/components/modals/sandbox-state'
 import { Toaster } from '@/components/ui/sonner'
 import type { ReactNode } from 'react'
 import type { Metadata } from 'next'
@@ -40,14 +36,10 @@ export default function RootLayout({
       <body className="antialiased">
         <Suspense fallback={null}>
           <NuqsAdapter>
-            <ChatProvider>
-              <ErrorMonitor>{children}</ErrorMonitor>
-            </ChatProvider>
+            {children}
           </NuqsAdapter>
         </Suspense>
         <Toaster />
-        <CommandLogsStream />
-        <SandboxState />
       </body>
     </html>
   )
