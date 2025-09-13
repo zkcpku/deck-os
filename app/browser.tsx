@@ -2,7 +2,7 @@
 
 import { Card } from '@/components/card'
 import { cn } from '@/lib/utils'
-import { ArrowLeft, ArrowRight, RefreshCw, Home, ExternalLink, Copy } from 'lucide-react'
+import { ArrowLeft, ArrowRight, RefreshCw, Home, ExternalLink, Copy, Camera } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useBrowserEvents } from '@/store/browser-events'
 import html2canvas from 'html2canvas'
@@ -168,6 +168,61 @@ export function Browser({ className }: BrowserProps) {
     }
   }
 
+  const handleRecordScreenshot = async () => {
+    if (!iframeRef.current) return
+
+    try {
+      // Get the iframe document
+      const iframe = iframeRef.current
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
+
+      if (!iframeDoc) {
+        throw new Error('Cannot access iframe content')
+      }
+
+      // Use html2canvas to capture the iframe content
+      const canvas = await html2canvas(iframeDoc.body, {
+        allowTaint: true,
+        useCORS: true,
+        scale: 1,
+        width: iframe.clientWidth,
+        height: iframe.clientHeight,
+        backgroundColor: '#ffffff'
+      })
+
+      // Convert canvas to base64
+      const base64Image = canvas.toDataURL('image/png')
+      
+      // Create a browser event for the screenshot
+      const screenshotEvent = {
+        id: `screenshot-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        type: 'screenshot',
+        timestamp: new Date().toISOString(),
+        element: {
+          tagName: 'IFRAME',
+          id: '',
+          className: '',
+          text: 'Browser screenshot',
+          href: '',
+          src: displayUrl
+        },
+        details: {
+          imageData: base64Image,
+          width: iframe.clientWidth,
+          height: iframe.clientHeight,
+          action: 'record'
+        },
+        url: displayUrl
+      }
+
+      // Add the event to the browser events store
+      addEvent(screenshotEvent)
+      
+    } catch (err) {
+      console.error('Failed to record screenshot:', err)
+    }
+  }
+
   return (
     <Card className={cn('flex flex-col', className)}>
       <div className="flex items-center gap-2 p-2 border-b">
@@ -225,6 +280,13 @@ export function Browser({ className }: BrowserProps) {
           title="Copy screenshot"
         >
           <Copy className="w-4 h-4" />
+        </button>
+        <button
+          onClick={handleRecordScreenshot}
+          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+          title="Record screenshot to events"
+        >
+          <Camera className="w-4 h-4" />
         </button>
         <button
           onClick={handleOpenExternal}

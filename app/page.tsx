@@ -1,7 +1,8 @@
 'use client'
 
+import { useRef } from 'react'
 import { TextDisplay } from './text-display'
-import { Terminal } from './terminal'
+import { Terminal, TerminalRef } from './terminal'
 import { Browser } from './browser'
 import { TabContent, TabItem } from '@/components/tabs'
 import {
@@ -11,6 +12,11 @@ import {
 } from 'react-resizable-panels'
 
 export default function Page() {
+  const terminalRef = useRef<TerminalRef>(null)
+
+  const getTerminalContent = () => {
+    return terminalRef.current?.getTerminalContent() || ''
+  }
   return (
     <>
       <div className="flex flex-col h-screen max-h-screen overflow-hidden p-2">
@@ -24,13 +30,13 @@ export default function Page() {
         {/* Mobile layout tabs taking the whole space*/}
         <div className="flex flex-1 w-full overflow-hidden md:hidden">
           <TabContent tabId="text" className="flex-1">
-            <TextDisplay className="flex-1 overflow-hidden" />
+            <TextDisplay className="flex-1 overflow-hidden" getTerminalContent={getTerminalContent} />
           </TabContent>
           <TabContent tabId="browser" className="flex-1">
             <Browser className="flex-1 overflow-hidden" />
           </TabContent>
           <TabContent tabId="terminal" className="flex-1">
-            <Terminal className="flex-1 overflow-hidden" />
+            <Terminal ref={terminalRef} className="flex-1 overflow-hidden" />
           </TabContent>
         </div>
 
@@ -40,7 +46,7 @@ export default function Page() {
           className="hidden md:flex flex-1 w-full"
         >
           <Panel defaultSize={33} minSize={10}>
-            <TextDisplay className="h-full overflow-hidden" />
+            <TextDisplay className="h-full overflow-hidden" getTerminalContent={getTerminalContent} />
           </Panel>
           
           <PanelResizeHandle className="h-1 bg-gray-200 dark:bg-gray-800 hover:bg-blue-500 transition-colors" />
@@ -52,7 +58,7 @@ export default function Page() {
           <PanelResizeHandle className="h-1 bg-gray-200 dark:bg-gray-800 hover:bg-blue-500 transition-colors" />
           
           <Panel defaultSize={34} minSize={10}>
-            <Terminal className="h-full overflow-hidden" />
+            <Terminal ref={terminalRef} className="h-full overflow-hidden" />
           </Panel>
         </PanelGroup>
       </div>
