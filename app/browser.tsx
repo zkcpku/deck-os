@@ -177,14 +177,14 @@ export function Browser({ className }: BrowserProps) {
           <ExternalLink className="w-4 h-4" />
         </button>
       </div>
-      <div className="flex-1 relative overflow-hidden">
+      <div className="flex-1 relative overflow-auto">
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-white dark:bg-gray-900 z-10">
             <div className="text-sm text-gray-500">Loading...</div>
           </div>
         )}
         {error && (
-          <div className="absolute top-0 left-0 right-0 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-2 text-sm">
+          <div className="absolute top-0 left-0 right-0 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-2 text-sm z-10">
             {error}
           </div>
         )}

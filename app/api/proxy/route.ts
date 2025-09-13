@@ -37,8 +37,30 @@ export async function GET(request: NextRequest) {
         const urlObj = new URL(targetUrl)
         const baseUrl = `${urlObj.protocol}//${urlObj.host}`
         
-        // Event capture script
+        // Event capture script and styles for better scrolling
         const eventCaptureScript = `
+          <style>
+            html, body {
+              overflow: auto !important;
+              height: auto !important;
+              min-height: 100% !important;
+            }
+            /* Custom scrollbar styles */
+            ::-webkit-scrollbar {
+              width: 12px;
+              height: 12px;
+            }
+            ::-webkit-scrollbar-track {
+              background: #f1f1f1;
+            }
+            ::-webkit-scrollbar-thumb {
+              background: #888;
+              border-radius: 6px;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+              background: #555;
+            }
+          </style>
           <script>
             (function() {
               // Capture all browser events

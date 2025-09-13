@@ -28,6 +28,8 @@ export function Terminal({ className }: TerminalProps) {
       cursorBlink: true,
       fontSize: 14,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      scrollback: 10000, // Increase scrollback buffer
+      smoothScrollDuration: 100, // Smooth scrolling
       theme: {
         background: '#1e1e1e',
         foreground: '#d4d4d4',
@@ -71,9 +73,11 @@ export function Terminal({ className }: TerminalProps) {
       }
       // Display initial prompt
       term.write(`\x1b[1;34m${cwdRef.current}\x1b[0m $ `)
+      term.scrollToBottom()
     }).catch(() => {
       // Display initial prompt with default
       term.write(`\x1b[1;34m${cwdRef.current}\x1b[0m $ `)
+      term.scrollToBottom()
     })
     
     // Execute command via API
@@ -88,6 +92,7 @@ export function Terminal({ className }: TerminalProps) {
       if (command === 'clear') {
         term.clear()
         term.write(`\x1b[1;34m${cwdRef.current}\x1b[0m $ `)
+        term.scrollToBottom()
         return
       }
       
@@ -121,6 +126,9 @@ export function Terminal({ className }: TerminalProps) {
       }
       
       term.write(`\x1b[1;34m${cwdRef.current}\x1b[0m $ `)
+      
+      // Scroll to bottom to ensure the latest output is visible
+      term.scrollToBottom()
     }
     
     let currentLine = ''
@@ -217,7 +225,7 @@ export function Terminal({ className }: TerminalProps) {
           Ready
         </span>
       </div>
-      <div ref={terminalRef} className="flex-1 p-2 bg-[#1e1e1e]" />
+      <div ref={terminalRef} className="flex-1 p-2 bg-[#1e1e1e] overflow-auto" />
     </Card>
   )
 }
