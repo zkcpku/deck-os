@@ -2,10 +2,11 @@
   "name": "vibe-coding-agent",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "node server.js",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3900",
     "lint": "next lint",
     "type-check": "tsc --noEmit"
   },
