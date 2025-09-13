@@ -40,6 +40,36 @@ export function TextDisplay({ className }: TextDisplayProps) {
     } else if (event.type === 'submit') {
       const formData = event.details.formData?.map((item: any) => `${item.key}=${item.value}`).join(', ') || ''
       eventLine += ` data: {${formData}}`
+    } else if (event.type === 'console') {
+      // Handle console events with truncated content
+      const level = event.level || event.details?.level || 'log'
+      eventLine = `[${time}] CONSOLE.${level.toUpperCase()}`
+      
+      if (event.args && event.args.length > 0) {
+        // Join all console arguments
+        const content = event.args.join(' ')
+        // Truncate long content
+        const maxLength = 200
+        const truncated = content.length > maxLength 
+          ? content.substring(0, maxLength) + '...' 
+          : content
+        eventLine += ` - ${truncated}`
+      } else if (event.element.text) {
+        // Fallback to element text
+        const maxLength = 200
+        const truncated = event.element.text.length > maxLength 
+          ? event.element.text.substring(0, maxLength) + '...' 
+          : event.element.text
+        eventLine += ` - ${truncated}`
+      }
+      
+      // Add stack trace info if available (only first line)
+      if (event.stack) {
+        const firstStackLine = event.stack.split('\n')[0]
+        if (firstStackLine && firstStackLine.trim()) {
+          eventLine += ` (${firstStackLine.trim()})`
+        }
+      }
     }
     
     if (event.element.text && event.type === 'click') {
