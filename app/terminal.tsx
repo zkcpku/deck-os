@@ -2,6 +2,7 @@
 
 import { Card } from '@/components/card'
 import { cn } from '@/lib/utils'
+import { Copy } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import '@xterm/xterm/css/xterm.css'
 
@@ -156,18 +157,84 @@ export function Terminal({ className }: TerminalProps) {
     loadTerminal()
   }, [sessionId])
 
+  const handleCopyTerminal = async () => {
+    if (!xtermRef.current) return
+
+    try {
+      const term = xtermRef.current
+      
+      // Method 1: Use selectAll and getSelection for most reliable results
+      term.selectAll()
+      const selection = term.getSelection()
+      term.clearSelection()
+      
+      if (selection && selection.trim()) {
+        // Clean up the content: remove excessive empty lines and clean formatting
+        const cleanedContent = selection
+          .replace(/\r\n/g, '\n')  // Normalize line endings
+          .replace(/\n\s*\n\s*\n/g, '\n\n')  // Remove excessive empty lines
+          .trim()
+        
+        await navigator.clipboard.writeText(cleanedContent)
+        return
+      }
+      
+      // Method 2: Fallback to manual buffer reading if selection fails
+      let terminalContent = ''
+      const buffer = term.buffer.normal
+      const scrollbackSize = buffer.length
+      const viewportSize = term.rows
+      
+      // Get scrollback content first
+      for (let i = 0; i < scrollbackSize; i++) {
+        const line = buffer.getLine(i)
+        if (line) {
+          terminalContent += line.translateToString(true) + '\n'
+        }
+      }
+      
+      // Then get current viewport content
+      for (let i = 0; i < viewportSize; i++) {
+        const line = buffer.getLine(scrollbackSize + i)
+        if (line) {
+          terminalContent += line.translateToString(true) + '\n'
+        }
+      }
+      
+      // Clean up the content
+      terminalContent = terminalContent
+        .replace(/\r\n/g, '\n')
+        .replace(/\n\s*\n\s*\n/g, '\n\n')
+        .trim()
+      
+      await navigator.clipboard.writeText(terminalContent)
+      
+    } catch (err) {
+      console.error('Failed to copy terminal content:', err)
+    }
+  }
+
   return (
     <Card className={cn('flex flex-col', className)}>
       <div className="flex items-center justify-between px-3 py-2 border-b">
         <h3 className="text-sm font-medium">Terminal</h3>
-        <span className={cn(
-          "text-xs px-2 py-0.5 rounded",
-          isConnected 
-            ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-            : "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
-        )}>
-          {!isLoaded ? 'Loading...' : isConnected ? 'Connected' : 'Disconnected'}
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCopyTerminal}
+            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+            title="Copy terminal content"
+          >
+            <Copy className="w-4 h-4" />
+          </button>
+          <span className={cn(
+            "text-xs px-2 py-0.5 rounded",
+            isConnected 
+              ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+              : "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
+          )}>
+            {!isLoaded ? 'Loading...' : isConnected ? 'Connected' : 'Disconnected'}
+          </span>
+        </div>
       </div>
       <div ref={terminalRef} className="flex-1 p-2 bg-[#1e1e1e] overflow-auto" />
     </Card>

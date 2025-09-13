@@ -2,9 +2,10 @@
 
 import { Card } from '@/components/card'
 import { cn } from '@/lib/utils'
-import { ArrowLeft, ArrowRight, RefreshCw, Home, ExternalLink } from 'lucide-react'
+import { ArrowLeft, ArrowRight, RefreshCw, Home, ExternalLink, Copy } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useBrowserEvents } from '@/store/browser-events'
+import html2canvas from 'html2canvas'
 
 interface BrowserProps {
   className?: string
@@ -118,6 +119,55 @@ export function Browser({ className }: BrowserProps) {
     window.open(displayUrl, '_blank')
   }
 
+  const handleCopyScreenshot = async () => {
+    if (!iframeRef.current) return
+
+    try {
+      // Get the iframe document
+      const iframe = iframeRef.current
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
+
+      if (!iframeDoc) {
+        throw new Error('Cannot access iframe content')
+      }
+
+      // Use html2canvas to capture the iframe content
+      const canvas = await html2canvas(iframeDoc.body, {
+        allowTaint: true,
+        useCORS: true,
+        scale: 1,
+        width: iframe.clientWidth,
+        height: iframe.clientHeight,
+        backgroundColor: '#ffffff'
+      })
+
+      // Convert canvas to blob
+      canvas.toBlob(async (blob) => {
+        if (blob) {
+          try {
+            await navigator.clipboard.write([
+              new ClipboardItem({ 'image/png': blob })
+            ])
+            // Could add a toast notification here for success
+          } catch (err) {
+            console.error('Failed to copy screenshot:', err)
+            // Fallback: download the image
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `browser-screenshot-${Date.now()}.png`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            URL.revokeObjectURL(url)
+          }
+        }
+      }, 'image/png')
+    } catch (err) {
+      console.error('Failed to capture screenshot:', err)
+    }
+  }
+
   return (
     <Card className={cn('flex flex-col', className)}>
       <div className="flex items-center gap-2 p-2 border-b">
@@ -169,6 +219,13 @@ export function Browser({ className }: BrowserProps) {
             Go
           </button>
         </form>
+        <button
+          onClick={handleCopyScreenshot}
+          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+          title="Copy screenshot"
+        >
+          <Copy className="w-4 h-4" />
+        </button>
         <button
           onClick={handleOpenExternal}
           className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
