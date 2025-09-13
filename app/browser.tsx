@@ -79,7 +79,7 @@ export function Browser({ className }: BrowserProps) {
     return () => {
       window.removeEventListener('message', handleMessage)
     }
-  }, [addEvent])
+  }, [addEvent]) // Restore addEvent dependency now that we have ID-based deduplication
 
   const handleNavigate = (e: React.FormEvent) => {
     e.preventDefault()

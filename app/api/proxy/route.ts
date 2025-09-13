@@ -76,9 +76,15 @@ export async function GET(request: NextRequest) {
           </style>
           <script>
             (function() {
+              // Generate unique event ID
+              const generateEventId = () => {
+                return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+              };
+
               // Capture all browser events
               const captureEvent = (type, element, details) => {
                 const eventData = {
+                  id: generateEventId(),
                   type: type,
                   timestamp: new Date().toISOString(),
                   element: {
@@ -100,14 +106,14 @@ export async function GET(request: NextRequest) {
                 }, '*');
               };
 
-              // Click events
+              // Click events (use capture phase to ensure correct timing)
               document.addEventListener('click', (e) => {
                 captureEvent('click', e.target, {
                   x: e.clientX,
                   y: e.clientY,
                   button: e.button
                 });
-              });
+              }, true); // true = capture phase
 
               // Form submissions
               document.addEventListener('submit', (e) => {
@@ -163,6 +169,78 @@ export async function GET(request: NextRequest) {
               document.addEventListener('blur', (e) => {
                 captureEvent('blur', e.target, {});
               }, true);
+
+              // Console interception
+              const originalConsole = {
+                log: console.log,
+                warn: console.warn,
+                error: console.error,
+                info: console.info,
+                debug: console.debug
+              };
+
+              const createConsoleProxy = (level) => {
+                return function(...args) {
+                  // Call original console method
+                  originalConsole[level].apply(console, args);
+                  
+                  try {
+                    // Safely serialize arguments
+                    const serializedArgs = args.map(arg => {
+                      try {
+                        if (typeof arg === 'object' && arg !== null) {
+                          return JSON.stringify(arg, null, 2);
+                        }
+                        return String(arg);
+                      } catch (e) {
+                        return '[Object]';
+                      }
+                    });
+
+                    // Get stack trace
+                    const stack = new Error().stack || '';
+                    
+                    // Create console event
+                    const consoleEvent = {
+                      id: generateEventId(),
+                      type: 'console',
+                      timestamp: new Date().toISOString(),
+                      element: {
+                        tagName: 'CONSOLE',
+                        id: '',
+                        className: '',
+                        text: serializedArgs.join(' '),
+                        href: '',
+                        src: ''
+                      },
+                      details: {
+                        level: level,
+                        args: serializedArgs,
+                        stack: stack.split('\\n').slice(1, 4).join('\\n') // First 3 stack frames
+                      },
+                      url: window.location.href,
+                      level: level,
+                      args: serializedArgs,
+                      stack: stack.split('\\n').slice(1, 4).join('\\n')
+                    };
+                    
+                    // Send to parent window
+                    window.parent.postMessage({
+                      type: 'browser-event',
+                      data: consoleEvent
+                    }, '*');
+                  } catch (e) {
+                    // Silently fail to avoid breaking the page
+                  }
+                };
+              };
+
+              // Override console methods
+              console.log = createConsoleProxy('log');
+              console.warn = createConsoleProxy('warn');
+              console.error = createConsoleProxy('error');
+              console.info = createConsoleProxy('info');
+              console.debug = createConsoleProxy('debug');
               
               // Intercept fetch requests to route through proxy
               const originalFetch = window.fetch;
