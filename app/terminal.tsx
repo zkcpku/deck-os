@@ -8,13 +8,14 @@ import '@xterm/xterm/css/xterm.css'
 
 interface TerminalProps {
   className?: string
+  startCommand?: string | null
 }
 
 export interface TerminalRef {
   getTerminalContent: () => string
 }
 
-export const Terminal = forwardRef<TerminalRef, TerminalProps>(({ className }, ref) => {
+export const Terminal = forwardRef<TerminalRef, TerminalProps>(({ className, startCommand }, ref) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<any>(null)
   const fitAddonRef = useRef<any>(null)
@@ -147,6 +148,16 @@ export const Terminal = forwardRef<TerminalRef, TerminalProps>(({ className }, r
             cols: term.cols,
             rows: term.rows
           }))
+          
+          // Send initial command if provided
+          if (startCommand) {
+            setTimeout(() => {
+              ws.send(JSON.stringify({ 
+                type: 'data', 
+                data: startCommand + '\r' 
+              }))
+            }, 100) // Small delay to ensure terminal is ready
+          }
         }
 
         ws.onmessage = (event) => {

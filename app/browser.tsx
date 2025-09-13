@@ -9,15 +9,17 @@ import html2canvas from 'html2canvas'
 
 interface BrowserProps {
   className?: string
+  startUrl?: string | null
 }
 
-export function Browser({ className }: BrowserProps) {
-  const [url, setUrl] = useState('https://example.com')
-  const [displayUrl, setDisplayUrl] = useState('https://example.com')
+export function Browser({ className, startUrl }: BrowserProps) {
+  const defaultUrl = startUrl || 'https://example.com'
+  const [url, setUrl] = useState(defaultUrl)
+  const [displayUrl, setDisplayUrl] = useState(defaultUrl)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [content, setContent] = useState<string>('')
-  const [history, setHistory] = useState<string[]>(['https://example.com'])
+  const [history, setHistory] = useState<string[]>([defaultUrl])
   const [historyIndex, setHistoryIndex] = useState(0)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const { addEvent } = useBrowserEvents()
@@ -110,9 +112,8 @@ export function Browser({ className }: BrowserProps) {
   }
 
   const handleHome = () => {
-    const homeUrl = 'https://example.com'
-    setDisplayUrl(homeUrl)
-    loadUrl(homeUrl)
+    setDisplayUrl(defaultUrl)
+    loadUrl(defaultUrl)
   }
 
   const handleOpenExternal = () => {
