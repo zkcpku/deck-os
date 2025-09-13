@@ -2,19 +2,23 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+First, install dependencies and build native modules:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# Install dependencies
+pnpm install
+
+# Build native modules (required for node-pty)
+cd node_modules/.pnpm/node-pty@1.0.0/node_modules/node-pty && npx node-gyp rebuild && cd -
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then, run the development server:
+
+```bash
+pnpm run dev
+```
+
+Open [http://localhost:3900](http://localhost:3900) with your browser to see the result.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
