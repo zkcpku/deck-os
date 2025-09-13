@@ -4,6 +4,7 @@ import { Card } from '@/components/card'
 import { cn } from '@/lib/utils'
 import { ArrowLeft, ArrowRight, RefreshCw, Home, ExternalLink } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
+import { useBrowserEvents } from '@/store/browser-events'
 
 interface BrowserProps {
   className?: string
@@ -18,6 +19,7 @@ export function Browser({ className }: BrowserProps) {
   const [history, setHistory] = useState<string[]>(['https://example.com'])
   const [historyIndex, setHistoryIndex] = useState(0)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const { addEvent } = useBrowserEvents()
 
   const loadUrl = async (targetUrl: string) => {
     setIsLoading(true)
@@ -62,6 +64,22 @@ export function Browser({ className }: BrowserProps) {
   useEffect(() => {
     loadUrl(url)
   }, [])
+
+  // Set up message listener for browser events
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Verify the message is from our iframe
+      if (event.data?.type === 'browser-event') {
+        addEvent(event.data.data)
+      }
+    }
+
+    window.addEventListener('message', handleMessage)
+
+    return () => {
+      window.removeEventListener('message', handleMessage)
+    }
+  }, [addEvent])
 
   const handleNavigate = (e: React.FormEvent) => {
     e.preventDefault()

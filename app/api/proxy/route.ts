@@ -37,9 +37,106 @@ export async function GET(request: NextRequest) {
         const urlObj = new URL(targetUrl)
         const baseUrl = `${urlObj.protocol}//${urlObj.host}`
         
-        // Inject base tag if not present
+        // Event capture script
+        const eventCaptureScript = `
+          <script>
+            (function() {
+              // Capture all browser events
+              const captureEvent = (type, element, details) => {
+                const eventData = {
+                  type: type,
+                  timestamp: new Date().toISOString(),
+                  element: {
+                    tagName: element.tagName,
+                    id: element.id || '',
+                    className: element.className || '',
+                    text: element.textContent?.substring(0, 100) || '',
+                    href: element.href || '',
+                    src: element.src || ''
+                  },
+                  details: details,
+                  url: window.location.href
+                };
+                
+                // Send to parent window
+                window.parent.postMessage({
+                  type: 'browser-event',
+                  data: eventData
+                }, '*');
+              };
+
+              // Click events
+              document.addEventListener('click', (e) => {
+                captureEvent('click', e.target, {
+                  x: e.clientX,
+                  y: e.clientY,
+                  button: e.button
+                });
+              });
+
+              // Form submissions
+              document.addEventListener('submit', (e) => {
+                captureEvent('submit', e.target, {
+                  formData: Array.from(new FormData(e.target)).map(([k,v]) => ({key: k, value: v.toString().substring(0, 50)}))
+                });
+              });
+
+              // Input changes
+              document.addEventListener('input', (e) => {
+                captureEvent('input', e.target, {
+                  value: e.target.value?.substring(0, 100) || ''
+                });
+              });
+
+              // Page navigation
+              window.addEventListener('beforeunload', () => {
+                captureEvent('navigate', document.body, {
+                  from: window.location.href
+                });
+              });
+
+              // Scroll events (throttled)
+              let scrollTimeout;
+              window.addEventListener('scroll', () => {
+                clearTimeout(scrollTimeout);
+                scrollTimeout = setTimeout(() => {
+                  captureEvent('scroll', document.body, {
+                    scrollX: window.scrollX,
+                    scrollY: window.scrollY
+                  });
+                }, 200);
+              });
+
+              // Key presses (excluding modifiers)
+              document.addEventListener('keydown', (e) => {
+                if (e.key !== 'Tab' && e.key !== 'Shift' && e.key !== 'Control' && e.key !== 'Alt' && e.key !== 'Meta') {
+                  captureEvent('keypress', e.target, {
+                    key: e.key,
+                    code: e.code,
+                    ctrlKey: e.ctrlKey,
+                    shiftKey: e.shiftKey,
+                    altKey: e.altKey
+                  });
+                }
+              });
+
+              // Focus events
+              document.addEventListener('focus', (e) => {
+                captureEvent('focus', e.target, {});
+              }, true);
+
+              document.addEventListener('blur', (e) => {
+                captureEvent('blur', e.target, {});
+              }, true);
+            })();
+          </script>
+        `;
+        
+        // Inject base tag and event capture script
         if (!html.includes('<base')) {
-          html = html.replace('<head>', `<head><base href="${baseUrl}/">`)
+          html = html.replace('<head>', `<head><base href="${baseUrl}/">${eventCaptureScript}`)
+        } else {
+          html = html.replace('<head>', `<head>${eventCaptureScript}`)
         }
         
         // Replace relative URLs with absolute ones
