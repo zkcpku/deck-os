@@ -46,25 +46,31 @@ export default function Page() {
           </TabContent>
         </div>
 
-        {/* Desktop layout - Single column with resizable panels */}
+        {/* Desktop layout - Two columns: left (Browser Events + Terminal), right (Browser) */}
         <PanelGroup
-          direction="vertical"
+          direction="horizontal"
           className="hidden md:flex flex-1 w-full"
         >
-          <Panel defaultSize={33} minSize={10}>
-            <TextDisplay className="h-full overflow-hidden" getTerminalContent={getTerminalContent} />
+          {/* Left panel containing Browser Events and Terminal */}
+          <Panel defaultSize={50} minSize={30}>
+            <PanelGroup direction="vertical" className="h-full">
+              <Panel defaultSize={50} minSize={20}>
+                <TextDisplay className="h-full overflow-hidden" getTerminalContent={getTerminalContent} />
+              </Panel>
+              
+              <PanelResizeHandle className="h-1 bg-gray-200 dark:bg-gray-800 hover:bg-blue-500 transition-colors" />
+              
+              <Panel defaultSize={50} minSize={20}>
+                <Terminal ref={terminalRef} className="h-full overflow-hidden" startCommand={startCmd} />
+              </Panel>
+            </PanelGroup>
           </Panel>
           
-          <PanelResizeHandle className="h-1 bg-gray-200 dark:bg-gray-800 hover:bg-blue-500 transition-colors" />
+          <PanelResizeHandle className="w-1 bg-gray-200 dark:bg-gray-800 hover:bg-blue-500 transition-colors" />
           
-          <Panel defaultSize={33} minSize={10}>
+          {/* Right panel containing Browser */}
+          <Panel defaultSize={50} minSize={30}>
             <Browser className="h-full overflow-hidden" startUrl={startHtml} />
-          </Panel>
-          
-          <PanelResizeHandle className="h-1 bg-gray-200 dark:bg-gray-800 hover:bg-blue-500 transition-colors" />
-          
-          <Panel defaultSize={34} minSize={10}>
-            <Terminal ref={terminalRef} className="h-full overflow-hidden" startCommand={startCmd} />
           </Panel>
         </PanelGroup>
       </div>
