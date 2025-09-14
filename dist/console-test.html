@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Console Test Page</title>
+</head>
+<body>
+    <h1>Console Logging Test Page</h1>
+    <p>This page tests console.log interception</p>
+    
+    <button onclick="testConsole()">Test Console Logs</button>
+    <button onclick="testConsoleWithObjects()">Test Console with Objects</button>
+    
+    <script>
+        function testConsole() {
+            console.log('Hello from console.log!');
+            console.warn('This is a warning');
+            console.error('This is an error');
+            console.info('This is info');
+            console.debug('This is debug');
+        }
+        
+        function testConsoleWithObjects() {
+            console.log('Testing with objects:', { name: 'test', value: 123 });
+            console.log('Array test:', [1, 2, 3, 'hello']);
+            console.error('Error with object:', new Error('Test error'));
+        }
+        
+        // Auto test on load
+        setTimeout(() => {
+            console.log('Page loaded, auto console test');
+            console.warn('Automatic warning after 1 second');
+        }, 1000);
+    </script>
+</body>
+</html>

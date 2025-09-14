@@ -1,40 +1,102 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Deck OS
+
+A lightweight terminal-based desktop OS interface built with **Vite + Express**, featuring a web-based terminal emulator with complete xterm.js functionality.
+
+## Architecture
+
+This project uses a **dual-server architecture** for optimal performance:
+
+- **Frontend**: Vite development server on port `3850`
+- **Backend**: Express server with WebSocket support on port `3851`
+
+### Key Features
+
+- **Complete Terminal Emulation**: Full xterm.js support with node-pty backend
+- **File System Browser**: Navigate and view files in the web interface
+- **Web Proxy**: Browse any website through the embedded proxy
+- **Lightweight Bundle**: Optimized from 673MB to 224MB (67% reduction)
+- **Modern Stack**: React 19, TypeScript, Tailwind CSS, Zustand
 
 ## Getting Started
 
-First, install dependencies and build native modules:
+### Prerequisites
 
+- Node.js 18+ with pnpm
+- Python and build tools (for native module compilation)
+
+### Installation
+
+1. **Install dependencies**:
 ```bash
-# Install dependencies
 pnpm install
-
-# Build native modules (required for node-pty)
-cd node_modules/.pnpm/node-pty@1.0.0/node_modules/node-pty && npx node-gyp rebuild && cd -
 ```
 
-Then, run the development server:
+2. **Build native modules** (required for node-pty):
+```bash
+npx node-gyp rebuild
+```
 
+3. **Start development servers**:
 ```bash
 pnpm run dev
 ```
 
-Open [http://localhost:3900](http://localhost:3900) with your browser to see the result.
+This runs both frontend (Vite) and backend (Express) servers concurrently.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Access the Application
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open [http://localhost:3850](http://localhost:3850) in your browser.
 
-## Learn More
+The application will automatically proxy backend requests to `http://localhost:3851`.
 
-To learn more about Next.js, take a look at the following resources:
+## Available Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `pnpm run dev` - Start both frontend and backend development servers
+- `pnpm run build` - Build the frontend for production
+- `pnpm run serve` - Start only the backend server
+- `pnpm run lint` - Run ESLint code linting
+- `pnpm run type-check` - Run TypeScript type checking
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project Structure
 
-## Deploy on Vercel
+```
+├── app/                 # React components and frontend logic
+├── components/          # Reusable UI components  
+├── server/             # Express backend server
+│   ├── index.js        # Main server entry
+│   └── routes/         # API routes (proxy, files, WebSocket)
+├── dev-server.js       # Custom concurrent development script
+├── vite.config.ts      # Vite configuration with proxy setup
+└── dist/               # Built frontend assets
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Development
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### File Editing
+
+Edit any file in the `app/` or `components/` directory. The Vite development server provides hot module replacement for instant updates.
+
+### Backend Changes
+
+The Express server automatically restarts when you modify files in the `server/` directory.
+
+### Terminal Functionality
+
+The terminal component uses:
+- **xterm.js**: Frontend terminal emulator
+- **node-pty**: Backend pseudo-terminal for real shell processes
+- **WebSocket**: Real-time communication between frontend and backend
+
+## Deployment
+
+1. **Build the frontend**:
+```bash
+pnpm run build
+```
+
+2. **Start the production server**:
+```bash
+pnpm run serve
+```
+
+The Express server will serve both the API and static frontend files from the `dist/` directory.

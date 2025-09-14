@@ -1,20 +1,34 @@
+import express from 'express'
 import { createServer } from 'http'
-import { parse } from 'url'
-import next from 'next'
 import { WebSocketServer } from 'ws'
+import cors from 'cors'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import * as pty from 'node-pty'
 
-const dev = process.env.NODE_ENV !== 'production'
-const hostname = 'localhost'
-const port = 3950
+// Routes
+import filesRouter from './routes/files.js'
+import proxyRouter from './routes/proxy.js'
 
-const app = next({ dev, hostname, port })
-const handle = app.getRequestHandler()
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+const app = express()
+const port = 3851
+
+// Middleware
+app.use(cors())
+app.use(express.json())
+app.use(express.static(path.join(__dirname, '../dist')))
+
+// API Routes
+app.use('/api/files', filesRouter)
+app.use('/api/proxy', proxyRouter)
 
 // Store active terminal sessions
 const terminals = new Map()
 
-// Handle WebSocket connections
+// Handle WebSocket connections for terminal
 function handleWebSocket(ws, sessionId) {
   console.log(`Terminal WebSocket connected: ${sessionId}`)
   
@@ -54,12 +68,10 @@ function handleWebSocket(ws, sessionId) {
       
       switch (parsed.type) {
         case 'data':
-          // Forward input to PTY
           terminal.write(parsed.data)
           break
           
         case 'resize':
-          // Handle terminal resize
           terminal.resize(parsed.cols || 80, parsed.rows || 24)
           break
           
@@ -87,32 +99,27 @@ function handleWebSocket(ws, sessionId) {
   })
 }
 
-app.prepare().then(() => {
-  const server = createServer(async (req, res) => {
-    try {
-      const parsedUrl = parse(req.url, true)
-      await handle(req, res, parsedUrl)
-    } catch (err) {
-      console.error('Error occurred handling', req.url, err)
-      res.statusCode = 500
-      res.end('Internal server error')
-    }
-  })
+// Catch all handler: serve the index.html for client-side routing
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dist/index.html'))
+})
 
-  // Create WebSocket server
-  const wss = new WebSocketServer({ 
-    server,
-    path: '/api/terminal/websocket'
-  })
+// Create HTTP server
+const server = createServer(app)
 
-  wss.on('connection', (ws, req) => {
-    const url = parse(req.url, true)
-    const sessionId = url.query.sessionId || 'default'
-    
-    handleWebSocket(ws, sessionId)
-  })
+// Create WebSocket server
+const wss = new WebSocketServer({ 
+  server,
+  path: '/api/terminal/websocket'
+})
 
-  server.listen(port, () => {
-    console.log(`> Ready on http://${hostname}:${port}`)
-  })
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url, `http://${req.headers.host}`)
+  const sessionId = url.searchParams.get('sessionId') || 'default'
+  
+  handleWebSocket(ws, sessionId)
+})
+
+server.listen(port, () => {
+  console.log(`> Server ready on http://localhost:${port}`)
 })
