@@ -28,6 +28,7 @@
     "express": "^4.19.2",
     "html2canvas": "^1.4.1",
     "jszip": "^3.10.1",
+    "lucide-react": "^0.544.0",
     "node-gyp": "^11.4.2",
     "node-pty": "^1.0.0",
     "react": "19.1.0",
