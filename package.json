@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node server.js",
     "build": "next build",
-    "start": "next start -p 3950",
+    "start": "next start -p 3005",
     "lint": "next lint",
     "type-check": "tsc --noEmit"
   },
