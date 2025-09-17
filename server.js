@@ -28,8 +28,15 @@ function handleWebSocket(ws, sessionId) {
     env: { ...process.env, TERM: 'xterm-256color' }
   })
 
-  // Store the terminal session
-  terminals.set(sessionId, terminal)
+  // Store the terminal session with metadata
+  terminals.set(sessionId, {
+    terminal,
+    startTime: new Date(),
+    shell,
+    cwd: process.cwd(),
+    commandBuffer: '',
+    lastCommand: null
+  })
 
   // Forward PTY output to WebSocket
   terminal.onData((data) => {
@@ -41,26 +48,70 @@ function handleWebSocket(ws, sessionId) {
   // Handle terminal exit
   terminal.onExit((exitCode) => {
     console.log(`Terminal ${sessionId} exited with code: ${exitCode}`)
-    terminals.delete(sessionId)
-    if (ws.readyState === 1) {
-      ws.send(JSON.stringify({ type: 'exit', code: exitCode }))
+    const session = terminals.get(sessionId)
+    if (session) {
+      const executionTime = Date.now() - session.startTime.getTime()
+      // Send enhanced exit information
+      if (ws.readyState === 1) {
+        ws.send(JSON.stringify({ 
+          type: 'exit', 
+          code: exitCode,
+          executionTime,
+          sessionId 
+        }))
+      }
     }
+    terminals.delete(sessionId)
   })
 
   // Handle WebSocket messages
   ws.on('message', (message) => {
     try {
       const parsed = JSON.parse(message.toString())
+      const session = terminals.get(sessionId)
+      
+      if (!session) return
       
       switch (parsed.type) {
         case 'data':
+          // Track command input for command detection
+          if (session) {
+            if (parsed.data === '\r') {
+              // Command executed - extract command from buffer
+              const command = session.commandBuffer.trim()
+              if (command) {
+                session.lastCommand = {
+                  command,
+                  startTime: new Date(),
+                  cwd: session.cwd
+                }
+                // Send command event back to frontend
+                if (ws.readyState === 1) {
+                  ws.send(JSON.stringify({
+                    type: 'command',
+                    command,
+                    cwd: session.cwd,
+                    timestamp: new Date().toISOString()
+                  }))
+                }
+              }
+              session.commandBuffer = ''
+            } else if (parsed.data === '\u0003') {
+              // Ctrl+C - clear command buffer
+              session.commandBuffer = ''
+            } else if (parsed.data.length === 1 && parsed.data.charCodeAt(0) >= 32) {
+              // Printable character - add to command buffer
+              session.commandBuffer += parsed.data
+            }
+          }
+          
           // Forward input to PTY
-          terminal.write(parsed.data)
+          session.terminal.write(parsed.data)
           break
           
         case 'resize':
           // Handle terminal resize
-          terminal.resize(parsed.cols || 80, parsed.rows || 24)
+          session.terminal.resize(parsed.cols || 80, parsed.rows || 24)
           break
           
         default:
@@ -74,9 +125,9 @@ function handleWebSocket(ws, sessionId) {
   // Handle WebSocket close
   ws.on('close', () => {
     console.log(`Terminal WebSocket disconnected: ${sessionId}`)
-    const terminal = terminals.get(sessionId)
-    if (terminal) {
-      terminal.kill()
+    const session = terminals.get(sessionId)
+    if (session) {
+      session.terminal.kill()
       terminals.delete(sessionId)
     }
   })

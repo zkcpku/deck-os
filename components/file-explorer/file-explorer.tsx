@@ -23,6 +23,7 @@ import {
   downloadFile,
   isTextFile,
 } from '@/lib/file-operations'
+import { useEvents, FileEvent } from '@/store/events'
 
 interface FileExplorerProps {
   className?: string
@@ -78,6 +79,19 @@ export function FileExplorer({ className }: FileExplorerProps) {
 
   // Selection manager
   const selectionManager = useSelectionManager()
+  const { addEvent } = useEvents()
+  
+  // File event logging helper
+  const logFileEvent = (type: FileEvent['type'], details: FileEvent['details']) => {
+    const event: FileEvent = {
+      id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      eventType: 'file',
+      type,
+      timestamp: new Date().toISOString(),
+      details
+    }
+    addEvent(event)
+  }
 
   const fetchFiles = async (path: string) => {
     setLoading(true)
@@ -98,6 +112,12 @@ export function FileExplorer({ className }: FileExplorerProps) {
         setCurrentPath(data.path)
         setInputPath(data.path)
         selectionManager.clearSelection()
+        
+        // Log navigation event
+        logFileEvent('navigation', {
+          targetPath: data.path,
+          fileType: 'directory'
+        })
       } else if (data.type === 'file') {
         // If it's a file, navigate to parent directory
         const parentPath = path.substring(0, path.lastIndexOf('/')) || '/'
@@ -132,6 +152,14 @@ export function FileExplorer({ className }: FileExplorerProps) {
           isModified: false
         })
         setEditMode(false)
+        
+        // Log file open event
+        logFileEvent('edit', {
+          editAction: 'open',
+          sourcePath: filePath,
+          fileType: 'file',
+          fileSize: data.size || 0
+        })
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load file content')
@@ -172,6 +200,15 @@ export function FileExplorer({ className }: FileExplorerProps) {
       // Refresh file list to update file size
       fetchFiles(currentPath)
       
+      // Log file save event
+      logFileEvent('edit', {
+        editAction: 'save',
+        sourcePath: selectedFile.path,
+        fileType: 'file',
+        fileSize: data.size,
+        success: true
+      })
+      
     } catch (err: any) {
       setError(err.message || 'Failed to save file')
       console.error(err)
@@ -206,17 +243,51 @@ export function FileExplorer({ className }: FileExplorerProps) {
   const handleConfirmCreate = async () => {
     if (!createItemName.trim()) return
 
+    // Log operation start
+    logFileEvent('operation', {
+      operation: 'create',
+      targetPath: currentPath,
+      fileName: createItemName.trim(),
+      fileType: createItemType
+    })
+
     try {
       const result = await createFileOrFolder(currentPath, createItemName.trim(), createItemType)
       if (result.success) {
         fetchFiles(currentPath)
         setShowCreateDialog(false)
         setCreateItemName('')
+        
+        // Log successful operation
+        logFileEvent('operation', {
+          operation: 'create',
+          targetPath: result.path || `${currentPath}/${createItemName.trim()}`,
+          fileName: createItemName.trim(),
+          fileType: createItemType,
+          success: true
+        })
       } else {
         setError(result.error || 'Failed to create item')
+        // Log failed operation
+        logFileEvent('operation', {
+          operation: 'create',
+          targetPath: currentPath,
+          fileName: createItemName.trim(),
+          fileType: createItemType,
+          success: false,
+          error: result.error
+        })
       }
     } catch (err: any) {
       setError(err.message || 'Failed to create item')
+      logFileEvent('operation', {
+        operation: 'create',
+        targetPath: currentPath,
+        fileName: createItemName.trim(),
+        fileType: createItemType,
+        success: false,
+        error: err.message
+      })
     }
   }
 
@@ -382,6 +453,15 @@ export function FileExplorer({ className }: FileExplorerProps) {
 
   const handleItemSelect = (path: string, event: React.MouseEvent) => {
     selectionManager.selectItem(path, event)
+    
+    // Log selection event
+    const newSelectionCount = selectionManager.selectedItems.includes(path) ? 
+      selectionManager.selectedItems.length : selectionManager.selectedItems.length + 1
+    
+    logFileEvent('selection', {
+      sourcePath: path,
+      selectionCount: newSelectionCount
+    })
   }
 
   const handleHomeClick = () => {

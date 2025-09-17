@@ -2,9 +2,9 @@
 
 import { Card } from '@/components/card'
 import { cn } from '@/lib/utils'
-import { Copy, Download, Trash2, Activity } from 'lucide-react'
+import { Copy, Download, Trash2, Activity, Terminal, Folder, Globe } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { useBrowserEvents } from '@/store/browser-events'
+import { useEvents, BrowserEvent, TerminalEvent, FileEvent } from '@/store/events'
 import JSZip from 'jszip'
 
 interface TextDisplayProps {
@@ -13,85 +13,156 @@ interface TextDisplayProps {
 }
 
 export function TextDisplay({ className, getTerminalContent }: TextDisplayProps) {
-  const { events, clearEvents } = useBrowserEvents()
+  const { events, clearEvents, getEventsByType } = useEvents()
   const [autoScroll, setAutoScroll] = useState(true)
+  const [selectedTab, setSelectedTab] = useState<'all' | 'browser' | 'terminal' | 'file'>('all')
+  
+  // Get events by type
+  const browserEvents = getEventsByType('browser') as BrowserEvent[]
+  const terminalEvents = getEventsByType('terminal') as TerminalEvent[]
+  const fileEvents = getEventsByType('file') as FileEvent[]
+  
+  // Get filtered events based on selected tab
+  const getDisplayEvents = () => {
+    switch (selectedTab) {
+      case 'browser': return browserEvents
+      case 'terminal': return terminalEvents
+      case 'file': return fileEvents
+      default: return events
+    }
+  }
   
   // Format events for display
-  const formatEvent = (event: any) => {
+  const formatEvent = (event: BrowserEvent | TerminalEvent | FileEvent) => {
     const time = new Date(event.timestamp).toLocaleTimeString()
-    let eventLine = `[${time}] ${event.type.toUpperCase()}`
     
-    if (event.element.tagName) {
-      eventLine += ` - <${event.element.tagName.toLowerCase()}`
-      if (event.element.id) eventLine += ` id="${event.element.id}"`
-      if (event.element.className) eventLine += ` class="${event.element.className}"`
-      eventLine += `>`
-    }
-    
-    if (event.type === 'click') {
-      eventLine += ` at (${event.details.x}, ${event.details.y})`
-    } else if (event.type === 'input') {
-      eventLine += ` value: "${event.details.value}"`
-    } else if (event.type === 'keypress') {
-      eventLine += ` key: "${event.details.key}"`
-      if (event.details.ctrlKey) eventLine += ' +Ctrl'
-      if (event.details.shiftKey) eventLine += ' +Shift'
-      if (event.details.altKey) eventLine += ' +Alt'
-    } else if (event.type === 'scroll') {
-      eventLine += ` to (${event.details.scrollX}, ${event.details.scrollY})`
-    } else if (event.type === 'submit') {
-      const formData = event.details.formData?.map((item: any) => `${item.key}=${item.value}`).join(', ') || ''
-      eventLine += ` data: {${formData}}`
-    } else if (event.type === 'screenshot') {
-      eventLine += ` - ${event.element.text}`
-      eventLine += ` size: ${event.details.width}x${event.details.height}`
-    } else if (event.type === 'console') {
-      // Handle console events with truncated content
-      const level = event.level || event.details?.level || 'log'
-      eventLine = `[${time}] CONSOLE.${level.toUpperCase()}`
+    if (event.eventType === 'browser') {
+      const browserEvent = event as BrowserEvent
+      let eventLine = `[${time}] BROWSER ${browserEvent.type.toUpperCase()}`
       
-      if (event.args && event.args.length > 0) {
-        // Join all console arguments
-        const content = event.args.join(' ')
-        // Truncate long content
-        const maxLength = 200
-        const truncated = content.length > maxLength 
-          ? content.substring(0, maxLength) + '...' 
-          : content
-        eventLine += ` - ${truncated}`
-      } else if (event.element.text) {
-        // Fallback to element text
-        const maxLength = 200
-        const truncated = event.element.text.length > maxLength 
-          ? event.element.text.substring(0, maxLength) + '...' 
-          : event.element.text
-        eventLine += ` - ${truncated}`
+      if (browserEvent.element?.tagName) {
+        eventLine += ` - <${browserEvent.element.tagName.toLowerCase()}`
+        if (browserEvent.element.id) eventLine += ` id="${browserEvent.element.id}"`
+        if (browserEvent.element.className) eventLine += ` class="${browserEvent.element.className}"`
+        eventLine += `>`
       }
       
-      // Add stack trace info if available (only first line)
-      if (event.stack) {
-        const firstStackLine = event.stack.split('\n')[0]
-        if (firstStackLine && firstStackLine.trim()) {
-          eventLine += ` (${firstStackLine.trim()})`
+      if (browserEvent.type === 'click') {
+        eventLine += ` at (${browserEvent.details?.x}, ${browserEvent.details?.y})`
+      } else if (browserEvent.type === 'input') {
+        eventLine += ` value: "${browserEvent.details?.value}"`
+      } else if (browserEvent.type === 'keypress') {
+        eventLine += ` key: "${browserEvent.details?.key}"`
+        if (browserEvent.details?.ctrlKey) eventLine += ' +Ctrl'
+        if (browserEvent.details?.shiftKey) eventLine += ' +Shift'
+        if (browserEvent.details?.altKey) eventLine += ' +Alt'
+      } else if (browserEvent.type === 'scroll') {
+        eventLine += ` to (${browserEvent.details?.scrollX}, ${browserEvent.details?.scrollY})`
+      } else if (browserEvent.type === 'submit') {
+        const formData = browserEvent.details?.formData?.map((item: any) => `${item.key}=${item.value}`).join(', ') || ''
+        eventLine += ` data: {${formData}}`
+      } else if (browserEvent.type === 'screenshot') {
+        eventLine += ` - ${browserEvent.element?.text}`
+        eventLine += ` size: ${browserEvent.details?.width}x${browserEvent.details?.height}`
+      } else if (browserEvent.type === 'console') {
+        const level = browserEvent.level || browserEvent.details?.level || 'log'
+        eventLine += ` [${level.toUpperCase()}] `
+        const args = browserEvent.args || browserEvent.details?.args || []
+        const message = args.join(' ') || browserEvent.details?.message || ''
+        eventLine += message.length > 200 ? message.slice(0, 200) + '...' : message
+      }
+      
+      return eventLine
+    }
+    
+    if (event.eventType === 'terminal') {
+      const terminalEvent = event as TerminalEvent
+      let eventLine = `[${time}] TERMINAL ${terminalEvent.type.toUpperCase()}`
+      
+      if (terminalEvent.sessionId) {
+        eventLine += ` [${terminalEvent.sessionId}]`
+      }
+      
+      if (terminalEvent.type === 'command') {
+        eventLine += ` - "${terminalEvent.details.command}"`
+        if (terminalEvent.details.workingDirectory) {
+          eventLine += ` (${terminalEvent.details.workingDirectory})`
+        }
+      } else if (terminalEvent.type === 'output') {
+        eventLine += ` - ${terminalEvent.details.outputLength} bytes`
+        if (terminalEvent.details.output) {
+          eventLine += `: "${terminalEvent.details.output}"`
+        }
+      } else if (terminalEvent.type === 'input') {
+        eventLine += ` - "${terminalEvent.details.inputKey}"`
+      } else if (terminalEvent.type === 'session') {
+        if (terminalEvent.details.exitCode !== undefined) {
+          eventLine += ` - EXIT (code: ${terminalEvent.details.exitCode})`
+          if (terminalEvent.details.executionTime) {
+            eventLine += ` after ${Math.round(terminalEvent.details.executionTime / 1000)}s`
+          }
+        } else {
+          eventLine += ` - START (${terminalEvent.details.shellType})`
         }
       }
+      
+      return eventLine
     }
     
-    if (event.element.text && event.type === 'click') {
-      eventLine += ` text: "${event.element.text.substring(0, 50)}..."`
+    if (event.eventType === 'file') {
+      const fileEvent = event as FileEvent
+      let eventLine = `[${time}] FILE ${fileEvent.type.toUpperCase()}`
+      
+      if (fileEvent.type === 'navigation') {
+        eventLine += ` - ${fileEvent.details.targetPath}`
+      } else if (fileEvent.type === 'operation') {
+        eventLine += ` - ${fileEvent.details.operation?.toUpperCase()}`
+        if (fileEvent.details.fileName) {
+          eventLine += ` "${fileEvent.details.fileName}"`
+        }
+        if (fileEvent.details.sourcePath) {
+          eventLine += ` from ${fileEvent.details.sourcePath}`
+        }
+        if (fileEvent.details.targetPath) {
+          eventLine += ` to ${fileEvent.details.targetPath}`
+        }
+        if (fileEvent.details.success !== undefined) {
+          eventLine += ` - ${fileEvent.details.success ? 'SUCCESS' : 'FAILED'}`
+          if (fileEvent.details.error) {
+            eventLine += ` (${fileEvent.details.error})`
+          }
+        }
+      } else if (fileEvent.type === 'selection') {
+        eventLine += ` - ${fileEvent.details.selectionCount} item(s)`
+        if (fileEvent.details.sourcePath) {
+          eventLine += ` including ${fileEvent.details.sourcePath.split('/').pop()}`
+        }
+      } else if (fileEvent.type === 'edit') {
+        eventLine += ` - ${fileEvent.details.editAction?.toUpperCase()}`
+        if (fileEvent.details.sourcePath) {
+          eventLine += ` ${fileEvent.details.sourcePath.split('/').pop()}`
+        }
+        if (fileEvent.details.fileSize) {
+          eventLine += ` (${fileEvent.details.fileSize} bytes)`
+        }
+      } else if (fileEvent.type === 'upload') {
+        eventLine += ` - ${fileEvent.details.uploadStatus?.toUpperCase()}`
+        if (fileEvent.details.fileName) {
+          eventLine += ` "${fileEvent.details.fileName}"`
+        }
+      }
+      
+      return eventLine
     }
     
-    if (event.element.href) {
-      eventLine += ` href: "${event.element.href}"`
-    }
-    
-    return eventLine
+    return `[${time}] UNKNOWN EVENT`
   }
 
   // Handle screenshot preview modal
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   
-  const eventsText = events.map(formatEvent).join('\n')
+  const displayEvents = getDisplayEvents()
+  const eventsText = displayEvents.map(formatEvent).join('\n')
   
   // Auto-scroll to bottom when new events arrive
   useEffect(() => {
@@ -101,12 +172,11 @@ export function TextDisplay({ className, getTerminalContent }: TextDisplayProps)
         container.scrollTop = container.scrollHeight
       }
     }
-  }, [events, autoScroll])
+  }, [displayEvents, autoScroll])
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(eventsText)
-      // Could add a toast notification here
     } catch (err) {
       console.error('Failed to copy text:', err)
     }
@@ -119,93 +189,42 @@ export function TextDisplay({ className, getTerminalContent }: TextDisplayProps)
   const handleDownload = async () => {
     try {
       const zip = new JSZip()
-      const imageUrls: { [key: string]: string } = {}
-      let imageCounter = 0
       
-      // Generate markdown content for browser events
-      let markdownContent = '# Browser Events Log\n\n'
+      // Generate markdown content
+      let markdownContent = '# System Events Log\n\n'
       markdownContent += `Generated: ${new Date().toLocaleString()}\n\n`
-      markdownContent += '## Browser Events\n\n'
       
-      // Process each event
-      for (const event of events) {
-        const time = new Date(event.timestamp).toLocaleString()
-        markdownContent += `### [${time}] ${event.type.toUpperCase()}\n\n`
-        
-        // Basic event information
-        if (event.element.tagName) {
-          markdownContent += `**Element**: \`<${event.element.tagName.toLowerCase()}`
-          if (event.element.id) markdownContent += ` id="${event.element.id}"`
-          if (event.element.className) markdownContent += ` class="${event.element.className}"`
-          markdownContent += `>\`\n\n`
-        }
-        
-        // Event-specific details
-        if (event.type === 'click') {
-          markdownContent += `**Position**: (${event.details.x}, ${event.details.y})\n\n`
-        } else if (event.type === 'input') {
-          markdownContent += `**Value**: "${event.details.value}"\n\n`
-        } else if (event.type === 'keypress') {
-          markdownContent += `**Key**: "${event.details.key}"`
-          if (event.details.ctrlKey || event.details.shiftKey || event.details.altKey) {
-            const modifiers = []
-            if (event.details.ctrlKey) modifiers.push('Ctrl')
-            if (event.details.shiftKey) modifiers.push('Shift')
-            if (event.details.altKey) modifiers.push('Alt')
-            markdownContent += ` (+ ${modifiers.join(' + ')})`
-          }
-          markdownContent += '\n\n'
-        } else if (event.type === 'scroll') {
-          markdownContent += `**Scroll Position**: (${event.details.scrollX}, ${event.details.scrollY})\n\n`
-        } else if (event.type === 'submit') {
-          const formData = event.details.formData?.map((item: any) => `${item.key}=${item.value}`).join(', ') || ''
-          markdownContent += `**Form Data**: {${formData}}\n\n`
-        } else if (event.type === 'screenshot') {
-          const imageFilename = `screenshot_${++imageCounter}.png`
-          markdownContent += `**Screenshot**: ${event.element.text}\n\n`
-          markdownContent += `**Size**: ${event.details.width}x${event.details.height}\n\n`
-          markdownContent += `![Screenshot](./images/${imageFilename})\n\n`
-          
-          // Extract and save image data
-          if (event.details.imageData) {
-            const base64Data = event.details.imageData.replace(/^data:image\/[a-z]+;base64,/, '')
-            imageUrls[imageFilename] = base64Data
-          }
-        } else if (event.type === 'console') {
-          const level = event.level || event.details?.level || 'log'
-          markdownContent += `**Level**: ${level.toUpperCase()}\n\n`
-          
-          if (event.args && event.args.length > 0) {
-            markdownContent += `**Message**: ${event.args.join(' ')}\n\n`
-          } else if (event.element.text) {
-            markdownContent += `**Message**: ${event.element.text}\n\n`
-          }
-          
-          if (event.stack) {
-            markdownContent += `**Stack Trace**:\n\`\`\`\n${event.stack}\n\`\`\`\n\n`
-          }
-        }
-        
-        // Additional information
-        if (event.element.text && event.type === 'click') {
-          const text = event.element.text.length > 100 
-            ? event.element.text.substring(0, 100) + '...' 
-            : event.element.text
-          markdownContent += `**Text**: "${text}"\n\n`
-        }
-        
-        if (event.element.href) {
-          markdownContent += `**Link**: ${event.element.href}\n\n`
-        }
-        
-        if (event.url) {
-          markdownContent += `**URL**: ${event.url}\n\n`
-        }
-        
-        markdownContent += '---\n\n'
+      // Browser Events
+      if (browserEvents.length > 0) {
+        markdownContent += '## Browser Events\n\n'
+        browserEvents.forEach(event => {
+          const time = new Date(event.timestamp).toLocaleString()
+          markdownContent += `### [${time}] ${event.type.toUpperCase()}\n\n`
+          markdownContent += formatEvent(event) + '\n\n---\n\n'
+        })
       }
       
-      // Add terminal logs section
+      // Terminal Events
+      if (terminalEvents.length > 0) {
+        markdownContent += '## Terminal Events\n\n'
+        terminalEvents.forEach(event => {
+          const time = new Date(event.timestamp).toLocaleString()
+          markdownContent += `### [${time}] ${event.type.toUpperCase()}\n\n`
+          markdownContent += formatEvent(event) + '\n\n---\n\n'
+        })
+      }
+      
+      // File Events
+      if (fileEvents.length > 0) {
+        markdownContent += '## File Events\n\n'
+        fileEvents.forEach(event => {
+          const time = new Date(event.timestamp).toLocaleString()
+          markdownContent += `### [${time}] ${event.type.toUpperCase()}\n\n`
+          markdownContent += formatEvent(event) + '\n\n---\n\n'
+        })
+      }
+      
+      // Terminal logs
       markdownContent += '## Terminal Logs\n\n'
       if (getTerminalContent) {
         try {
@@ -218,35 +237,25 @@ export function TextDisplay({ className, getTerminalContent }: TextDisplayProps)
             markdownContent += '*No terminal output available.*\n\n'
           }
         } catch (err) {
-          console.error('Failed to get terminal content:', err)
           markdownContent += '*Error retrieving terminal logs.*\n\n'
         }
-      } else {
-        markdownContent += '*Terminal log collection not available.*\n\n'
       }
-      markdownContent += '---\n\n'
+      
       markdownContent += `**Total Events**: ${events.length}\n`
+      markdownContent += `**Browser Events**: ${browserEvents.length}\n`
+      markdownContent += `**Terminal Events**: ${terminalEvents.length}\n`
+      markdownContent += `**File Events**: ${fileEvents.length}\n`
       markdownContent += `**Report Generated**: ${new Date().toISOString()}\n`
       
       // Add markdown file to zip
-      zip.file('report.md', markdownContent)
-      
-      // Add images to zip
-      if (Object.keys(imageUrls).length > 0) {
-        const imagesFolder = zip.folder('images')
-        for (const [filename, base64Data] of Object.entries(imageUrls)) {
-          if (imagesFolder) {
-            imagesFolder.file(filename, base64Data, { base64: true })
-          }
-        }
-      }
+      zip.file('events-report.md', markdownContent)
       
       // Generate and download zip file
       const content = await zip.generateAsync({ type: 'blob' })
       const url = URL.createObjectURL(content)
       const a = document.createElement('a')
       a.href = url
-      a.download = `browser-terminal-logs-${Date.now()}.zip`
+      a.download = `system-events-${Date.now()}.zip`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -254,27 +263,61 @@ export function TextDisplay({ className, getTerminalContent }: TextDisplayProps)
       
     } catch (err) {
       console.error('Failed to generate download:', err)
-      // Fallback to simple text download
-      const blob = new Blob([eventsText], { type: 'text/plain' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `browser-events-${Date.now()}.txt`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+    }
+  }
+
+  const getTabIcon = (tab: string) => {
+    switch (tab) {
+      case 'browser': return <Globe className="w-4 h-4" />
+      case 'terminal': return <Terminal className="w-4 h-4" />
+      case 'file': return <Folder className="w-4 h-4" />
+      default: return <Activity className="w-4 h-4" />
+    }
+  }
+
+  const getTabTitle = (tab: string) => {
+    switch (tab) {
+      case 'browser': return 'Browser Events'
+      case 'terminal': return 'Terminal Events'
+      case 'file': return 'File Events'
+      default: return 'All Events'
+    }
+  }
+
+  const getEventCount = (tab: string) => {
+    switch (tab) {
+      case 'browser': return browserEvents.length
+      case 'terminal': return terminalEvents.length
+      case 'file': return fileEvents.length
+      default: return events.length
     }
   }
 
   return (
     <Card className={cn('flex flex-col', className)}>
       <div className="flex items-center justify-between px-3 py-2 border-b">
-        <div className="flex items-center gap-2">
-          <Activity className="w-4 h-4 text-blue-500" />
-          <h3 className="text-sm font-medium">Browser Events</h3>
-          <span className="text-xs text-gray-500">({events.length} events)</span>
+        <div className="flex items-center gap-4">
+          {/* Tab buttons */}
+          <div className="flex gap-1">
+            {(['all', 'browser', 'terminal', 'file'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setSelectedTab(tab)}
+                className={cn(
+                  "flex items-center gap-1 px-2 py-1 text-xs rounded",
+                  selectedTab === tab
+                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                    : "hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400"
+                )}
+              >
+                {getTabIcon(tab)}
+                <span>{getTabTitle(tab)}</span>
+                <span className="ml-1 text-xs opacity-60">({getEventCount(tab)})</span>
+              </button>
+            ))}
+          </div>
         </div>
+        
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-1 text-xs">
             <input
@@ -286,54 +329,63 @@ export function TextDisplay({ className, getTerminalContent }: TextDisplayProps)
             Auto-scroll
           </label>
           <div className="flex gap-1">
-          <button
-            onClick={handleCopy}
-            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
-            title="Copy to clipboard"
-          >
-            <Copy className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleDownload}
-            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
-            title="Download as file"
-          >
-            <Download className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleClear}
-            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-red-500"
-            title="Clear events"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+            <button
+              onClick={handleCopy}
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+              title="Copy to clipboard"
+            >
+              <Copy className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleDownload}
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+              title="Download as file"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleClear}
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-red-500"
+              title="Clear events"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>
       
       <div className="flex-1 p-3 overflow-auto event-container">
-        {events.length === 0 ? (
+        {displayEvents.length === 0 ? (
           <div className="text-gray-500 text-sm text-center mt-8">
-            <Activity className="w-8 h-8 mx-auto mb-2 opacity-30" />
-            <p>No browser events captured yet.</p>
-            <p className="text-xs mt-1">Navigate and interact with the browser to see events here.</p>
+            {getTabIcon(selectedTab)}
+            <div className="mt-2">
+              <p>No {selectedTab === 'all' ? '' : selectedTab + ' '}events captured yet.</p>
+              <p className="text-xs mt-1">
+                {selectedTab === 'browser' && 'Navigate and interact with the browser to see events here.'}
+                {selectedTab === 'terminal' && 'Use the terminal to see command events here.'}
+                {selectedTab === 'file' && 'Use the file manager to see file operation events here.'}
+                {selectedTab === 'all' && 'Use the browser, terminal, or file manager to see events here.'}
+              </p>
+            </div>
           </div>
         ) : (
           <div className="space-y-2">
-            {events.map((event, index) => (
+            {displayEvents.map((event, index) => (
               <div key={event.id || index} className="flex items-start gap-3">
                 <div className="flex-1">
                   <pre className="font-mono text-xs leading-relaxed whitespace-pre-wrap">
                     {formatEvent(event)}
                   </pre>
                 </div>
-                {event.type === 'screenshot' && event.details?.imageData && (
+                {event.eventType === 'browser' && 
+                 (event as BrowserEvent).type === 'screenshot' && 
+                 (event as BrowserEvent).details?.imageData && (
                   <div className="flex-shrink-0">
                     <img
-                      src={event.details.imageData}
+                      src={(event as BrowserEvent).details.imageData}
                       alt="Screenshot"
                       className="w-16 h-12 object-cover border border-gray-200 dark:border-gray-700 rounded cursor-pointer hover:opacity-80 transition-opacity"
-                      onClick={() => setPreviewImage(event.details.imageData)}
+                      onClick={() => setPreviewImage((event as BrowserEvent).details.imageData)}
                       title="Click to view full size"
                     />
                   </div>
@@ -362,7 +414,8 @@ export function TextDisplay({ className, getTerminalContent }: TextDisplayProps)
       )}
       
       <div className="px-3 py-1 border-t text-xs text-gray-500">
-        {events.length} events | {eventsText.length} characters | Last: {events.length > 0 ? new Date(events[events.length - 1].timestamp).toLocaleTimeString() : 'N/A'}
+        {getEventCount(selectedTab)} events | {eventsText.length} characters | 
+        Last: {displayEvents.length > 0 ? new Date(displayEvents[displayEvents.length - 1].timestamp).toLocaleTimeString() : 'N/A'}
       </div>
     </Card>
   )
