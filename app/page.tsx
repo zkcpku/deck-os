@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { TextDisplay } from './text-display'
 import { Terminal, TerminalRef } from './terminal'
 import { Browser } from './browser'
+import { FileExplorer } from '@/components/file-explorer'
 import { TabContent, TabItem } from '@/components/tabs'
 import {
   PanelResizeHandle,
@@ -31,6 +32,7 @@ export default function Page() {
           <TabItem tabId="text">Text</TabItem>
           <TabItem tabId="browser">Browser</TabItem>
           <TabItem tabId="terminal">Terminal</TabItem>
+          <TabItem tabId="files">Files</TabItem>
         </ul>
 
         {/* Mobile layout tabs taking the whole space*/}
@@ -44,14 +46,17 @@ export default function Page() {
           <TabContent tabId="terminal" className="flex-1">
             <Terminal ref={terminalRef} className="flex-1 overflow-hidden" startCommand={startCmd} />
           </TabContent>
+          <TabContent tabId="files" className="flex-1">
+            <FileExplorer className="flex-1 overflow-hidden" />
+          </TabContent>
         </div>
 
-        {/* Desktop layout - Two columns: left (Browser Events + Terminal), right (Browser) */}
+        {/* Desktop layout - Two columns: left (Text + Terminal), right (Browser + Files) */}
         <PanelGroup
           direction="horizontal"
           className="hidden md:flex flex-1 w-full"
         >
-          {/* Left panel containing Browser Events and Terminal */}
+          {/* Left panel containing Text Display and Terminal */}
           <Panel defaultSize={50} minSize={30}>
             <PanelGroup direction="vertical" className="h-full">
               <Panel defaultSize={50} minSize={20}>
@@ -68,9 +73,19 @@ export default function Page() {
           
           <PanelResizeHandle className="w-1 bg-gray-200 dark:bg-gray-800 hover:bg-blue-500 transition-colors" />
           
-          {/* Right panel containing Browser */}
+          {/* Right panel containing Browser and File Explorer */}
           <Panel defaultSize={50} minSize={30}>
-            <Browser className="h-full overflow-hidden" startUrl={startHtml} />
+            <PanelGroup direction="vertical" className="h-full">
+              <Panel defaultSize={60} minSize={30}>
+                <Browser className="h-full overflow-hidden" startUrl={startHtml} />
+              </Panel>
+              
+              <PanelResizeHandle className="h-1 bg-gray-200 dark:bg-gray-800 hover:bg-blue-500 transition-colors" />
+              
+              <Panel defaultSize={40} minSize={20}>
+                <FileExplorer className="h-full overflow-hidden" />
+              </Panel>
+            </PanelGroup>
           </Panel>
         </PanelGroup>
       </div>

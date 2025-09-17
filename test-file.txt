@@ -1,0 +1,9 @@
+This is a test file for the file explorer.
+You can edit this content and save it using Ctrl+S.
+
+Features:
+- View file content
+- Edit text files
+- Save changes
+- File size display
+- Modified indicator (●)
