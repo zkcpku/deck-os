@@ -94,3 +94,60 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { path: filePath, content } = body
+    
+    if (!filePath || content === undefined) {
+      return NextResponse.json(
+        { error: 'Path and content are required' },
+        { status: 400 }
+      )
+    }
+    
+    // Security: Resolve to absolute path and validate
+    const absolutePath = path.resolve(filePath)
+    
+    // Basic security check - prevent writing to system directories
+    const homeDir = os.homedir()
+    if (!absolutePath.startsWith(homeDir) && !absolutePath.startsWith('/tmp') && !absolutePath.startsWith(process.cwd())) {
+      return NextResponse.json(
+        { error: 'Access denied: Cannot write to system directories' },
+        { status: 403 }
+      )
+    }
+    
+    try {
+      // Ensure directory exists
+      const dirPath = path.dirname(absolutePath)
+      await fs.mkdir(dirPath, { recursive: true })
+      
+      // Write file
+      await fs.writeFile(absolutePath, content, 'utf-8')
+      
+      // Get updated file stats
+      const stats = await fs.stat(absolutePath)
+      
+      return NextResponse.json({
+        success: true,
+        path: absolutePath,
+        size: stats.size,
+        modified: stats.mtime
+      })
+      
+    } catch (error: any) {
+      return NextResponse.json(
+        { error: `Failed to write file: ${error.message}` },
+        { status: 500 }
+      )
+    }
+    
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: `Invalid request: ${error.message}` },
+      { status: 400 }
+    )
+  }
+}
