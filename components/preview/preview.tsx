@@ -1,6 +1,6 @@
 'use client'
 
-import { BarLoader } from 'react-spinners'
+// import { BarLoader } from 'react-spinners'
 import { CompassIcon, RefreshCwIcon } from 'lucide-react'
 import { Panel, PanelHeader } from '@/components/panels/panels'
 import { ScrollArea } from '@radix-ui/react-scroll-area'
@@ -116,7 +116,7 @@ export function Preview({ className, disabled, url }: Props) {
 
             {isLoading && !error && (
               <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center flex-col gap-2">
-                <BarLoader color="#666" />
+                <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
                 <span className="text-gray-500 text-xs">Loading...</span>
               </div>
             )}

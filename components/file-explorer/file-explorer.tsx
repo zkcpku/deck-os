@@ -1,8 +1,29 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import { File, Folder, Search, Home, ArrowUp, Save, X, Edit3 } from 'lucide-react'
+import { 
+  File, Folder, Search, Home, ArrowUp, Save, X, Edit3, 
+  Plus, FolderPlus, Upload, Trash2, Copy, Move, MoreHorizontal
+} from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
+import { FileContextMenu } from './context-menu'
+import { FileItemComponent } from './file-item'
+import { useSelectionManager } from './selection-manager'
+import { UploadZone } from './upload-zone'
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
+import { BulkOperationDialog } from '@/components/ui/bulk-operation-dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  createFileOrFolder,
+  renameItem,
+  deleteItems,
+  moveItems,
+  copyItems,
+  downloadFile,
+  isTextFile,
+} from '@/lib/file-operations'
+import { useEvents, FileEvent } from '@/store/events'
 
 interface FileExplorerProps {
   className?: string
@@ -36,6 +57,41 @@ export function FileExplorer({ className }: FileExplorerProps) {
   const [fileLoading, setFileLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [editMode, setEditMode] = useState(false)
+  
+  // New state for enhanced features
+  const [showUploadZone, setShowUploadZone] = useState(false)
+  const [createItemName, setCreateItemName] = useState('')
+  const [createItemType, setCreateItemType] = useState<'file' | 'directory'>('file')
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [showRenameDialog, setShowRenameDialog] = useState(false)
+  const [renameTarget, setRenameTarget] = useState('')
+  const [newName, setNewName] = useState('')
+  const [clipboard, setClipboard] = useState<{ paths: string[], operation: 'copy' | 'cut' } | null>(null)
+  
+  // Dialogs state
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deleteTargets, setDeleteTargets] = useState<string[]>([])
+  const [showBulkDialog, setShowBulkDialog] = useState(false)
+  const [bulkOperation, setBulkOperation] = useState<'move' | 'copy'>('move')
+  const [bulkTargets, setBulkTargets] = useState<string[]>([])
+  const [operationResults, setOperationResults] = useState<Array<{path: string, success: boolean, error?: string}>>([])  
+  const [showResults, setShowResults] = useState(false)
+
+  // Selection manager
+  const selectionManager = useSelectionManager()
+  const { addEvent } = useEvents()
+  
+  // File event logging helper
+  const logFileEvent = (type: FileEvent['type'], details: FileEvent['details']) => {
+    const event: FileEvent = {
+      id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      eventType: 'file',
+      type,
+      timestamp: new Date().toISOString(),
+      details
+    }
+    addEvent(event)
+  }
 
   const fetchFiles = async (path: string) => {
     setLoading(true)
@@ -55,6 +111,13 @@ export function FileExplorer({ className }: FileExplorerProps) {
         setFiles(data.items || [])
         setCurrentPath(data.path)
         setInputPath(data.path)
+        selectionManager.clearSelection()
+        
+        // Log navigation event
+        logFileEvent('navigation', {
+          targetPath: data.path,
+          fileType: 'directory'
+        })
       } else if (data.type === 'file') {
         // If it's a file, navigate to parent directory
         const parentPath = path.substring(0, path.lastIndexOf('/')) || '/'
@@ -89,6 +152,14 @@ export function FileExplorer({ className }: FileExplorerProps) {
           isModified: false
         })
         setEditMode(false)
+        
+        // Log file open event
+        logFileEvent('edit', {
+          editAction: 'open',
+          sourcePath: filePath,
+          fileType: 'file',
+          fileSize: data.size || 0
+        })
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load file content')
@@ -129,6 +200,15 @@ export function FileExplorer({ className }: FileExplorerProps) {
       // Refresh file list to update file size
       fetchFiles(currentPath)
       
+      // Log file save event
+      logFileEvent('edit', {
+        editAction: 'save',
+        sourcePath: selectedFile.path,
+        fileType: 'file',
+        fileSize: data.size,
+        success: true
+      })
+      
     } catch (err: any) {
       setError(err.message || 'Failed to save file')
       console.error(err)
@@ -147,12 +227,229 @@ export function FileExplorer({ className }: FileExplorerProps) {
     }
   }
 
+  // New file operations
+  const handleCreateFile = () => {
+    setCreateItemType('file')
+    setCreateItemName('')
+    setShowCreateDialog(true)
+  }
+
+  const handleCreateFolder = () => {
+    setCreateItemType('directory')
+    setCreateItemName('')
+    setShowCreateDialog(true)
+  }
+
+  const handleConfirmCreate = async () => {
+    if (!createItemName.trim()) return
+
+    // Log operation start
+    logFileEvent('operation', {
+      operation: 'create',
+      targetPath: currentPath,
+      fileName: createItemName.trim(),
+      fileType: createItemType
+    })
+
+    try {
+      const result = await createFileOrFolder(currentPath, createItemName.trim(), createItemType)
+      if (result.success) {
+        fetchFiles(currentPath)
+        setShowCreateDialog(false)
+        setCreateItemName('')
+        
+        // Log successful operation
+        logFileEvent('operation', {
+          operation: 'create',
+          targetPath: result.path || `${currentPath}/${createItemName.trim()}`,
+          fileName: createItemName.trim(),
+          fileType: createItemType,
+          success: true
+        })
+      } else {
+        setError(result.error || 'Failed to create item')
+        // Log failed operation
+        logFileEvent('operation', {
+          operation: 'create',
+          targetPath: currentPath,
+          fileName: createItemName.trim(),
+          fileType: createItemType,
+          success: false,
+          error: result.error
+        })
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to create item')
+      logFileEvent('operation', {
+        operation: 'create',
+        targetPath: currentPath,
+        fileName: createItemName.trim(),
+        fileType: createItemType,
+        success: false,
+        error: err.message
+      })
+    }
+  }
+
+  const handleRename = (path: string) => {
+    setRenameTarget(path)
+    setNewName(path.split('/').pop() || '')
+    setShowRenameDialog(true)
+  }
+
+  const handleConfirmRename = async () => {
+    if (!newName.trim() || !renameTarget) return
+
+    const parentPath = renameTarget.substring(0, renameTarget.lastIndexOf('/'))
+    const newPath = `${parentPath}/${newName.trim()}`
+
+    try {
+      const result = await renameItem(renameTarget, newPath)
+      if (result.success) {
+        fetchFiles(currentPath)
+        setShowRenameDialog(false)
+        setRenameTarget('')
+        setNewName('')
+        // Update selected file path if it was renamed
+        if (selectedFile && selectedFile.path === renameTarget) {
+          setSelectedFile(prev => prev ? { ...prev, path: newPath } : null)
+        }
+      } else {
+        setError(result.error || 'Failed to rename item')
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to rename item')
+    }
+  }
+
+  const handleDelete = (paths: string[]) => {
+    setDeleteTargets(paths)
+    setShowDeleteDialog(true)
+  }
+
+  const handleConfirmDelete = async () => {
+    try {
+      // Log delete operation start
+      logFileEvent('operation', {
+        operation: 'delete',
+        sourcePath: deleteTargets.join(', '),
+        fileName: deleteTargets.map(path => path.split('/').pop()).join(', ')
+      })
+      
+      const result = await deleteItems(deleteTargets)
+      setOperationResults(result.results)
+      setShowResults(true)
+      setShowDeleteDialog(false)
+      fetchFiles(currentPath)
+      
+      // Log delete operation result
+      const successCount = result.results.filter(r => r.success).length
+      const failCount = result.results.filter(r => !r.success).length
+      logFileEvent('operation', {
+        operation: 'delete_complete',
+        sourcePath: `${successCount} successful, ${failCount} failed`,
+        fileName: `Total: ${deleteTargets.length} items`
+      })
+      
+      // Clear selected file if it was deleted
+      if (selectedFile && deleteTargets.includes(selectedFile.path)) {
+        setSelectedFile(null)
+        setEditMode(false)
+      }
+      
+      selectionManager.clearSelection()
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete items')
+    }
+  }
+
+  const handleCopy = (paths: string[]) => {
+    setClipboard({ paths, operation: 'copy' })
+    // Log copy to clipboard
+    logFileEvent('operation', {
+      operation: 'copy_to_clipboard',
+      sourcePath: paths.join(', '),
+      fileName: paths.map(path => path.split('/').pop()).join(', ')
+    })
+  }
+
+  const handleCut = (paths: string[]) => {
+    setClipboard({ paths, operation: 'cut' })
+    // Log cut to clipboard
+    logFileEvent('operation', {
+      operation: 'cut_to_clipboard',
+      sourcePath: paths.join(', '),
+      fileName: paths.map(path => path.split('/').pop()).join(', ')
+    })
+  }
+
+  const handlePaste = async () => {
+    if (!clipboard) return
+
+    try {
+      // Log operation start
+      logFileEvent('operation', {
+        operation: clipboard.operation,
+        sourcePath: clipboard.paths.join(', '),
+        targetPath: currentPath,
+        fileName: clipboard.paths.map(path => path.split('/').pop()).join(', ')
+      })
+      
+      const result = clipboard.operation === 'copy' 
+        ? await copyItems(clipboard.paths, currentPath)
+        : await moveItems(clipboard.paths, currentPath)
+      
+      setOperationResults(result.results)
+      setShowResults(true)
+      fetchFiles(currentPath)
+      
+      // Log operation result
+      const successCount = result.results.filter(r => r.success).length
+      const failCount = result.results.filter(r => !r.success).length
+      logFileEvent('operation', {
+        operation: `${clipboard.operation}_complete`,
+        sourcePath: `${successCount} successful, ${failCount} failed`,
+        targetPath: currentPath,
+        fileName: `Total: ${clipboard.paths.length} items`
+      })
+      
+      if (clipboard.operation === 'cut') {
+        setClipboard(null)
+      }
+    } catch (err: any) {
+      setError(err.message || `Failed to ${clipboard.operation} items`)
+    }
+  }
+
+  const handleDownload = async (path: string) => {
+    try {
+      await downloadFile(path)
+    } catch (err: any) {
+      setError(err.message || 'Failed to download file')
+    }
+  }
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.ctrlKey && e.key === 's' && selectedFile && editMode) {
       e.preventDefault()
       saveFile()
+    } else if (e.ctrlKey && e.key === 'a' && !editMode) {
+      e.preventDefault()
+      selectionManager.selectAll(files.map(f => f.path))
+    } else if (e.key === 'Delete' && selectionManager.selectedItems.length > 0) {
+      e.preventDefault()
+      handleDelete(selectionManager.selectedItems)
+    } else if (e.ctrlKey && e.key === 'c' && selectionManager.selectedItems.length > 0) {
+      e.preventDefault()
+      handleCopy(selectionManager.selectedItems)
+    } else if (e.ctrlKey && e.key === 'x' && selectionManager.selectedItems.length > 0) {
+      e.preventDefault()
+      handleCut(selectionManager.selectedItems)
+    } else if (e.ctrlKey && e.key === 'v' && clipboard) {
+      e.preventDefault()
+      handlePaste()
     }
-  }, [selectedFile, editMode])
+  }, [selectedFile, editMode, selectionManager.selectedItems, clipboard])
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown)
@@ -200,6 +497,19 @@ export function FileExplorer({ className }: FileExplorerProps) {
     }
   }
 
+  const handleItemSelect = (path: string, event: React.MouseEvent) => {
+    selectionManager.selectItem(path, event)
+    
+    // Log selection event
+    const newSelectionCount = selectionManager.selectedItems.includes(path) ? 
+      selectionManager.selectedItems.length : selectionManager.selectedItems.length + 1
+    
+    logFileEvent('selection', {
+      sourcePath: path,
+      selectionCount: newSelectionCount
+    })
+  }
+
   const handleHomeClick = () => {
     fetch('/api/files')
       .then(res => res.json())
@@ -230,17 +540,72 @@ export function FileExplorer({ className }: FileExplorerProps) {
     return `${size.toFixed(0)}${units[unitIndex]}`
   }
 
-  const isTextFile = (filename: string) => {
-    const textExtensions = ['.txt', '.md', '.js', '.ts', '.tsx', '.jsx', '.json', '.css', '.html', '.xml', '.yml', '.yaml', '.py', '.java', '.c', '.cpp', '.h', '.php', '.rb', '.go', '.rs', '.sh', '.sql', '.csv']
-    return textExtensions.some(ext => filename.toLowerCase().endsWith(ext))
-  }
-
   return (
     <div className={cn('flex flex-col h-full border border-primary/18 bg-background rounded-sm', className)}>
-      {/* Header */}
+      {/* Header with toolbar */}
       <div className="flex items-center px-2 py-1.5 border-b border-primary/18 bg-secondary">
         <span className="text-sm font-medium text-secondary-foreground">Files</span>
         <div className="flex items-center gap-1 ml-auto">
+          {/* New action buttons */}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleCreateFile}
+            title="New File"
+            className="h-6 w-6 p-0"
+          >
+            <Plus className="w-3 h-3" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleCreateFolder}
+            title="New Folder"
+            className="h-6 w-6 p-0"
+          >
+            <FolderPlus className="w-3 h-3" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              const newState = !showUploadZone
+              setShowUploadZone(newState)
+              if (newState) {
+                logFileEvent('upload', {
+                  uploadStatus: 'started',
+                  targetPath: currentPath
+                })
+              }
+            }}
+            title="Upload Files"
+            className="h-6 w-6 p-0"
+          >
+            <Upload className="w-3 h-3" />
+          </Button>
+          {selectionManager.selectedItems.length > 0 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => handleDelete(selectionManager.selectedItems)}
+              title="Delete Selected"
+              className="h-6 w-6 p-0 text-destructive"
+            >
+              <Trash2 className="w-3 h-3" />
+            </Button>
+          )}
+          {clipboard && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handlePaste}
+              title={`Paste (${clipboard.operation})`}
+              className="h-6 w-6 p-0"
+            >
+              {clipboard.operation === 'copy' ? <Copy className="w-3 h-3" /> : <Move className="w-3 h-3" />}
+            </Button>
+          )}
+          <div className="w-px h-4 bg-border mx-1" />
           <button
             onClick={handleHomeClick}
             className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-xs"
@@ -277,6 +642,21 @@ export function FileExplorer({ className }: FileExplorerProps) {
           </button>
         </form>
       </div>
+
+      {/* Selection info */}
+      {selectionManager.selectedItems.length > 0 && (
+        <div className="px-2 py-1 border-b border-primary/18 bg-blue-50 dark:bg-blue-900/20">
+          <div className="text-xs text-blue-600 dark:text-blue-400">
+            {selectionManager.selectedItems.length} item{selectionManager.selectedItems.length > 1 ? 's' : ''} selected
+            <button
+              onClick={selectionManager.clearSelection}
+              className="ml-2 text-blue-500 hover:text-blue-700 underline"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* Error display */}
       {error && (
@@ -291,9 +671,27 @@ export function FileExplorer({ className }: FileExplorerProps) {
         </div>
       )}
 
+      {/* Upload zone */}
+      {showUploadZone && (
+        <div className="p-2 border-b border-primary/18">
+          <UploadZone
+            targetPath={currentPath}
+            onUploadComplete={() => {
+              // Log upload completion
+              logFileEvent('upload', {
+                uploadStatus: 'completed',
+                targetPath: currentPath
+              })
+              fetchFiles(currentPath)
+              setShowUploadZone(false)
+            }}
+          />
+        </div>
+      )}
+
       {/* Content area - vertical split */}
       <div className="flex-1 flex flex-col min-h-0">
-        {/* File list */}
+        {/* File list with context menu */}
         <div className={cn("flex-shrink-0 overflow-auto border-b border-primary/18", selectedFile ? "max-h-32" : "flex-1")}>
           {loading && (
             <div className="flex items-center justify-center p-4">
@@ -302,42 +700,34 @@ export function FileExplorer({ className }: FileExplorerProps) {
           )}
           
           {!loading && (
-            <div className="p-1">
-              <div className="space-y-0.5">
-                {files.map((file) => (
-                  <div
-                    key={file.path}
-                    onClick={() => handleItemClick(file)}
-                    className={cn(
-                      "flex items-center gap-1.5 px-1.5 py-1 rounded text-xs hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer",
-                      file.type === 'directory' && "font-medium",
-                      file.error && "text-red-500 cursor-not-allowed",
-                      selectedFile?.path === file.path && "bg-blue-50 dark:bg-blue-900/30"
-                    )}
-                  >
-                    <span className="flex-shrink-0">
-                      {file.type === 'directory' ? (
-                        <Folder className="w-3 h-3 text-blue-500" />
-                      ) : (
-                        <File className="w-3 h-3 text-gray-400" />
-                      )}
-                    </span>
-                    
-                    <span className="flex-1 truncate min-w-0">{file.name}</span>
-                    
-                    {file.type === 'file' && file.size && (
-                      <span className="text-xs text-gray-500 flex-shrink-0">
-                        {formatSize(file.size)}
-                      </span>
-                    )}
-                  </div>
-                ))}
+            <FileContextMenu
+              selectedItems={selectionManager.selectedItems}
+              onCreateFile={handleCreateFile}
+              onCreateFolder={handleCreateFolder}
+              onRename={handleRename}
+              onDelete={handleDelete}
+              onCopy={handleCopy}
+              onCut={handleCut}
+              onDownload={handleDownload}
+            >
+              <div className="p-1">
+                <div className="space-y-0.5">
+                  {files.map((file) => (
+                    <FileItemComponent
+                      key={file.path}
+                      item={file}
+                      isSelected={selectionManager.isSelected(file.path)}
+                      onSelect={handleItemSelect}
+                      onDoubleClick={handleItemClick}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
+            </FileContextMenu>
           )}
         </div>
 
-        {/* File content editor */}
+        {/* File content editor - unchanged */}
         {selectedFile && (
           <div className="flex-1 flex flex-col min-h-0">
             {/* File header */}
@@ -419,6 +809,67 @@ export function FileExplorer({ className }: FileExplorerProps) {
           </div>
         )}
       </div>
+
+      {/* Dialogs */}
+      <ConfirmationDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        title={`Create New ${createItemType === 'file' ? 'File' : 'Folder'}`}
+        description={`Enter a name for the new ${createItemType}:`}
+        confirmText="Create"
+        onConfirm={handleConfirmCreate}
+      >
+        <Input
+          value={createItemName}
+          onChange={(e) => setCreateItemName(e.target.value)}
+          placeholder={`${createItemType === 'file' ? 'File' : 'Folder'} name...`}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              handleConfirmCreate()
+            }
+          }}
+        />
+      </ConfirmationDialog>
+
+      <ConfirmationDialog
+        open={showRenameDialog}
+        onOpenChange={setShowRenameDialog}
+        title="Rename Item"
+        description="Enter a new name:"
+        confirmText="Rename"
+        onConfirm={handleConfirmRename}
+      >
+        <Input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="New name..."
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              handleConfirmRename()
+            }
+          }}
+        />
+      </ConfirmationDialog>
+
+      <ConfirmationDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        title={`Delete ${deleteTargets.length} item${deleteTargets.length > 1 ? 's' : ''}`}
+        description="This action cannot be undone. Are you sure you want to delete the selected items?"
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={handleConfirmDelete}
+      />
+
+      <BulkOperationDialog
+        open={showResults}
+        onOpenChange={setShowResults}
+        operation="operation"
+        items={operationResults.map(r => r.path)}
+        onConfirm={() => {}}
+        results={operationResults}
+        showResults={true}
+      />
     </div>
   )
 }

@@ -4,7 +4,7 @@ import { Card } from '@/components/card'
 import { cn } from '@/lib/utils'
 import { ArrowLeft, ArrowRight, RefreshCw, Home, ExternalLink, Copy, Camera } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
-import { useBrowserEvents } from '@/store/browser-events'
+import { useBrowserEvents } from '@/store/events'
 import html2canvas from 'html2canvas'
 
 interface BrowserProps {
@@ -73,7 +73,12 @@ export function Browser({ className, startUrl }: BrowserProps) {
     const handleMessage = (event: MessageEvent) => {
       // Verify the message is from our iframe
       if (event.data?.type === 'browser-event') {
-        addEvent(event.data.data)
+        // Add eventType field for new unified store
+        const browserEvent = {
+          ...event.data.data,
+          eventType: 'browser' as const
+        }
+        addEvent(browserEvent)
       }
     }
 
@@ -197,6 +202,7 @@ export function Browser({ className, startUrl }: BrowserProps) {
       // Create a browser event for the screenshot
       const screenshotEvent = {
         id: `screenshot-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        eventType: 'browser' as const,
         type: 'screenshot',
         timestamp: new Date().toISOString(),
         element: {

@@ -1,3 +1,8 @@
+# 安装方法
+
+pnpm install
+pnpm run dev
+
 # AGENTS.md
 This file provides guidance to Verdent when working with code in this repository.
 
@@ -8,9 +13,9 @@ This file provides guidance to Verdent when working with code in this repository
 4. Development Hints
 
 ## Commands
-- `pnpm dev` - Start development server with WebSocket terminal support (port 3015)
+- `pnpm dev` - Start development server with WebSocket terminal support (port 3018)
 - `pnpm build` - Build for production
-- `pnpm start` - Start production server (port 3015)
+- `pnpm start` - Start production server (port 3018)
 - `pnpm lint` - Run ESLint linting
 - `pnpm type-check` - Run TypeScript type checking
 - `pnpm install` - Auto-builds node-pty native module via postinstall script

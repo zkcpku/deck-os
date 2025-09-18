@@ -4,6 +4,7 @@ import { Card } from '@/components/card'
 import { cn } from '@/lib/utils'
 import { Copy } from 'lucide-react'
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react'
+import { useEvents, TerminalEvent } from '@/store/events'
 import '@xterm/xterm/css/xterm.css'
 
 interface TerminalProps {
@@ -23,6 +24,20 @@ export const Terminal = forwardRef<TerminalRef, TerminalProps>(({ className, sta
   const [sessionId] = useState(() => Math.random().toString(36).substring(7))
   const [isConnected, setIsConnected] = useState(false)
   const [isLoaded, setIsLoaded] = useState(false)
+  const { addEvent } = useEvents()
+  
+  // Terminal event logging helpers
+  const logTerminalEvent = (type: TerminalEvent['type'], details: TerminalEvent['details']) => {
+    const event: TerminalEvent = {
+      id: `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      eventType: 'terminal',
+      type,
+      timestamp: new Date().toISOString(),
+      sessionId,
+      details
+    }
+    addEvent(event)
+  }
 
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
@@ -142,6 +157,12 @@ export const Terminal = forwardRef<TerminalRef, TerminalProps>(({ className, sta
           console.log('Terminal WebSocket connected')
           setIsConnected(true)
           
+          // Log session start event
+          logTerminalEvent('session', {
+            shellType: 'bash',
+            workingDirectory: process.cwd?.() || 'unknown'
+          })
+          
           // Send initial resize
           ws.send(JSON.stringify({
             type: 'resize',
@@ -156,6 +177,11 @@ export const Terminal = forwardRef<TerminalRef, TerminalProps>(({ className, sta
                 type: 'data', 
                 data: startCommand + '\r' 
               }))
+              // Log initial command
+              logTerminalEvent('command', {
+                command: startCommand,
+                workingDirectory: process.cwd?.() || 'unknown'
+              })
             }, 100) // Small delay to ensure terminal is ready
           }
         }
@@ -167,11 +193,33 @@ export const Terminal = forwardRef<TerminalRef, TerminalProps>(({ className, sta
             switch (message.type) {
               case 'data':
                 term.write(message.data)
+                // Log output events (but limit frequency to avoid spam)
+                if (message.data.length > 0) {
+                  logTerminalEvent('output', {
+                    output: message.data.length > 100 ? message.data.slice(0, 100) + '...' : message.data,
+                    outputLength: message.data.length
+                  })
+                }
+                break
+                
+              case 'command':
+                // Log command execution from server
+                logTerminalEvent('command', {
+                  command: message.command,
+                  workingDirectory: message.cwd
+                })
                 break
                 
               case 'exit':
-                term.write(`\r\n\x1b[31mProcess exited with code: ${message.code}\x1b[0m\r\n`)
+                const exitCode = message.code || 0
+                term.write(`\r\n\x1b[31mProcess exited with code: ${exitCode}\x1b[0m\r\n`)
                 setIsConnected(false)
+                // Log process exit event
+                logTerminalEvent('session', {
+                  exitCode,
+                  shellType: 'bash',
+                  executionTime: message.executionTime
+                })
                 break
             }
           } catch (error) {
@@ -193,6 +241,26 @@ export const Terminal = forwardRef<TerminalRef, TerminalProps>(({ className, sta
         term.onData((data) => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'data', data }))
+            
+            // Log input events (for special keys and commands)
+            if (data === '\r') {
+              logTerminalEvent('input', {
+                inputKey: 'Enter'
+              })
+            } else if (data === '\u0003') {
+              logTerminalEvent('input', {
+                inputKey: 'Ctrl+C'
+              })
+            } else if (data === '\u001a') {
+              logTerminalEvent('input', {
+                inputKey: 'Ctrl+Z'
+              })
+            } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
+              // Regular printable characters - log in batches to avoid spam
+              logTerminalEvent('input', {
+                inputKey: data
+              })
+            }
           }
         })
 

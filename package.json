@@ -6,13 +6,14 @@
   "scripts": {
     "dev": "node server.js",
     "build": "next build",
-    "start": "next start -p 3015",
+    "start": "next start -p 3018",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "postinstall": "node scripts/postinstall.js"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "1.3.3",
+    "@radix-ui/react-context-menu": "^2.2.16",
     "@radix-ui/react-dialog": "1.1.14",
     "@radix-ui/react-label": "2.1.7",
     "@radix-ui/react-popover": "1.1.14",
