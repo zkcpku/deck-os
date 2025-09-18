@@ -80,7 +80,7 @@ export function BulkOperationDialog({
                   className="flex items-center justify-between p-2 border rounded"
                 >
                   <span className="text-sm truncate flex-1">
-                    {result.path.split('/').pop() || result.path}
+                    {result.path ? (result.path.split('/').pop() || result.path) : 'Unknown'}
                   </span>
                   <div className="flex items-center gap-2">
                     <Badge

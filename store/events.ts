@@ -49,13 +49,13 @@ export interface FileEvent extends BaseEvent {
   eventType: 'file'
   type: 'navigation' | 'operation' | 'selection' | 'upload' | 'edit'
   details: {
-    operation?: 'create' | 'delete' | 'rename' | 'copy' | 'move'
+    operation?: 'create' | 'delete' | 'rename' | 'copy' | 'move' | 'cut' | 'delete_complete' | 'copy_complete' | 'cut_complete' | 'copy_to_clipboard' | 'cut_to_clipboard'
     sourcePath?: string
     targetPath?: string
     fileName?: string
     fileType?: 'file' | 'directory'
     selectionCount?: number
-    uploadStatus?: 'start' | 'progress' | 'complete'
+    uploadStatus?: 'start' | 'started' | 'progress' | 'complete' | 'completed'
     editAction?: 'open' | 'save' | 'modify'
     fileSize?: number
     success?: boolean

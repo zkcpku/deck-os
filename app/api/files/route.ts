@@ -350,7 +350,7 @@ export async function PATCH(request: NextRequest) {
       
       if (operation === 'move' && !isWriteAllowed(sourceAbsolutePath)) {
         results.push({
-          sourcePath: sourcePath,
+          path: sourcePath,
           success: false,
           error: 'Access denied to source path'
         })
@@ -377,7 +377,7 @@ export async function PATCH(request: NextRequest) {
           }
         } else {
           results.push({
-            sourcePath: sourcePath,
+            path: sourcePath,
             success: false,
             error: `Unsupported operation: ${operation}`
           })
@@ -385,14 +385,13 @@ export async function PATCH(request: NextRequest) {
         }
         
         results.push({
-          sourcePath: sourcePath,
-          targetPath: finalTargetPath,
+          path: sourcePath,
           success: true
         })
         
       } catch (error: any) {
         results.push({
-          sourcePath: sourcePath,
+          path: sourcePath,
           success: false,
           error: error.message
         })

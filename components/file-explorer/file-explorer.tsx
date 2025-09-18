@@ -74,7 +74,7 @@ export function FileExplorer({ className }: FileExplorerProps) {
   const [showBulkDialog, setShowBulkDialog] = useState(false)
   const [bulkOperation, setBulkOperation] = useState<'move' | 'copy'>('move')
   const [bulkTargets, setBulkTargets] = useState<string[]>([])
-  const [operationResults, setOperationResults] = useState<any[]>([])
+  const [operationResults, setOperationResults] = useState<Array<{path: string, success: boolean, error?: string}>>([])  
   const [showResults, setShowResults] = useState(false)
 
   // Selection manager
@@ -329,11 +329,27 @@ export function FileExplorer({ className }: FileExplorerProps) {
 
   const handleConfirmDelete = async () => {
     try {
+      // Log delete operation start
+      logFileEvent('operation', {
+        operation: 'delete',
+        sourcePath: deleteTargets.join(', '),
+        fileName: deleteTargets.map(path => path.split('/').pop()).join(', ')
+      })
+      
       const result = await deleteItems(deleteTargets)
       setOperationResults(result.results)
       setShowResults(true)
       setShowDeleteDialog(false)
       fetchFiles(currentPath)
+      
+      // Log delete operation result
+      const successCount = result.results.filter(r => r.success).length
+      const failCount = result.results.filter(r => !r.success).length
+      logFileEvent('operation', {
+        operation: 'delete_complete',
+        sourcePath: `${successCount} successful, ${failCount} failed`,
+        fileName: `Total: ${deleteTargets.length} items`
+      })
       
       // Clear selected file if it was deleted
       if (selectedFile && deleteTargets.includes(selectedFile.path)) {
@@ -349,16 +365,36 @@ export function FileExplorer({ className }: FileExplorerProps) {
 
   const handleCopy = (paths: string[]) => {
     setClipboard({ paths, operation: 'copy' })
+    // Log copy to clipboard
+    logFileEvent('operation', {
+      operation: 'copy_to_clipboard',
+      sourcePath: paths.join(', '),
+      fileName: paths.map(path => path.split('/').pop()).join(', ')
+    })
   }
 
   const handleCut = (paths: string[]) => {
     setClipboard({ paths, operation: 'cut' })
+    // Log cut to clipboard
+    logFileEvent('operation', {
+      operation: 'cut_to_clipboard',
+      sourcePath: paths.join(', '),
+      fileName: paths.map(path => path.split('/').pop()).join(', ')
+    })
   }
 
   const handlePaste = async () => {
     if (!clipboard) return
 
     try {
+      // Log operation start
+      logFileEvent('operation', {
+        operation: clipboard.operation,
+        sourcePath: clipboard.paths.join(', '),
+        targetPath: currentPath,
+        fileName: clipboard.paths.map(path => path.split('/').pop()).join(', ')
+      })
+      
       const result = clipboard.operation === 'copy' 
         ? await copyItems(clipboard.paths, currentPath)
         : await moveItems(clipboard.paths, currentPath)
@@ -366,6 +402,16 @@ export function FileExplorer({ className }: FileExplorerProps) {
       setOperationResults(result.results)
       setShowResults(true)
       fetchFiles(currentPath)
+      
+      // Log operation result
+      const successCount = result.results.filter(r => r.success).length
+      const failCount = result.results.filter(r => !r.success).length
+      logFileEvent('operation', {
+        operation: `${clipboard.operation}_complete`,
+        sourcePath: `${successCount} successful, ${failCount} failed`,
+        targetPath: currentPath,
+        fileName: `Total: ${clipboard.paths.length} items`
+      })
       
       if (clipboard.operation === 'cut') {
         setClipboard(null)
@@ -522,7 +568,16 @@ export function FileExplorer({ className }: FileExplorerProps) {
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => setShowUploadZone(!showUploadZone)}
+            onClick={() => {
+              const newState = !showUploadZone
+              setShowUploadZone(newState)
+              if (newState) {
+                logFileEvent('upload', {
+                  uploadStatus: 'started',
+                  targetPath: currentPath
+                })
+              }
+            }}
             title="Upload Files"
             className="h-6 w-6 p-0"
           >
@@ -622,6 +677,11 @@ export function FileExplorer({ className }: FileExplorerProps) {
           <UploadZone
             targetPath={currentPath}
             onUploadComplete={() => {
+              // Log upload completion
+              logFileEvent('upload', {
+                uploadStatus: 'completed',
+                targetPath: currentPath
+              })
               fetchFiles(currentPath)
               setShowUploadZone(false)
             }}
