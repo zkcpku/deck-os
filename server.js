@@ -5,8 +5,8 @@ import { WebSocketServer } from 'ws'
 import * as pty from 'node-pty'
 
 const dev = process.env.NODE_ENV !== 'production'
-const hostname = 'localhost'
-const port = process.env.PORT || 3018
+const hostname = process.env.HOSTNAME || 'localhost'
+const port = process.env.PORT || 3017
 
 const app = next({ dev, hostname, port })
 const handle = app.getRequestHandler()
