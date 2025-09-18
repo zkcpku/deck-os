@@ -2,7 +2,7 @@
 
 import { Card } from '@/components/card'
 import { cn } from '@/lib/utils'
-import { Copy, Download, Trash2, Activity, Terminal, Folder, Globe } from 'lucide-react'
+import { Copy, Download, Trash2, Activity, Terminal, Folder, Globe, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useEvents, BrowserEvent, TerminalEvent, FileEvent } from '@/store/events'
 import JSZip from 'jszip'
@@ -16,6 +16,21 @@ export function TextDisplay({ className, getTerminalContent }: TextDisplayProps)
   const { events, clearEvents, getEventsByType } = useEvents()
   const [autoScroll, setAutoScroll] = useState(true)
   const [selectedTab, setSelectedTab] = useState<'all' | 'browser' | 'terminal' | 'file'>('all')
+  const [aiSummary, setAiSummary] = useState<{
+    summary: string
+    insights: string[]
+    eventCount: number
+    isLoading: boolean
+    error: string | null
+    isVisible: boolean
+  }>({
+    summary: '',
+    insights: [],
+    eventCount: 0,
+    isLoading: false,
+    error: null,
+    isVisible: false
+  })
   
   // Get events by type
   const browserEvents = getEventsByType('browser') as BrowserEvent[]
@@ -266,6 +281,61 @@ export function TextDisplay({ className, getTerminalContent }: TextDisplayProps)
     }
   }
 
+  const handleAiSummary = async () => {
+    const currentEvents = getDisplayEvents()
+    
+    if (currentEvents.length === 0) {
+      setAiSummary(prev => ({ 
+        ...prev, 
+        error: 'No events to summarize',
+        isVisible: true 
+      }))
+      return
+    }
+
+    setAiSummary(prev => ({ 
+      ...prev, 
+      isLoading: true, 
+      error: null, 
+      isVisible: true 
+    }))
+
+    try {
+      const response = await fetch('/api/ai-summary', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          events: currentEvents,
+          eventType: selectedTab,
+          includeImages: selectedTab === 'browser' || selectedTab === 'all'
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to generate summary')
+      }
+
+      const data = await response.json()
+      setAiSummary(prev => ({
+        ...prev,
+        summary: data.summary,
+        insights: data.insights || [],
+        eventCount: data.eventCount,
+        isLoading: false,
+        error: null
+      }))
+    } catch (error: any) {
+      setAiSummary(prev => ({
+        ...prev,
+        isLoading: false,
+        error: error.message || 'Failed to generate AI summary'
+      }))
+    }
+  }
+
   const getTabIcon = (tab: string) => {
     switch (tab) {
       case 'browser': return <Globe className="w-4 h-4" />
@@ -330,6 +400,14 @@ export function TextDisplay({ className, getTerminalContent }: TextDisplayProps)
           </label>
           <div className="flex gap-1">
             <button
+              onClick={handleAiSummary}
+              disabled={aiSummary.isLoading || getDisplayEvents().length === 0}
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Generate AI Summary"
+            >
+              <Sparkles className={cn("w-4 h-4", aiSummary.isLoading && "animate-pulse")} />
+            </button>
+            <button
               onClick={handleCopy}
               className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
               title="Copy to clipboard"
@@ -353,6 +431,63 @@ export function TextDisplay({ className, getTerminalContent }: TextDisplayProps)
           </div>
         </div>
       </div>
+      
+      {/* AI Summary Panel */}
+      {aiSummary.isVisible && (
+        <div className="border-b bg-blue-50 dark:bg-blue-950">
+          <div className="flex items-center justify-between px-3 py-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                AI Summary {aiSummary.eventCount > 0 && `(${aiSummary.eventCount} events)`}
+              </span>
+            </div>
+            <button
+              onClick={() => setAiSummary(prev => ({ ...prev, isVisible: false }))}
+              className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900 rounded"
+            >
+              <ChevronUp className="w-4 h-4" />
+            </button>
+          </div>
+          
+          <div className="px-3 pb-3 max-h-64 overflow-y-auto">
+            {aiSummary.isLoading && (
+              <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
+                <Sparkles className="w-4 h-4 animate-pulse" />
+                Analyzing events with AI...
+              </div>
+            )}
+            
+            {aiSummary.error && (
+              <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900 p-2 rounded">
+                {aiSummary.error}
+              </div>
+            )}
+            
+            {aiSummary.summary && !aiSummary.isLoading && (
+              <div className="space-y-3">
+                <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap bg-white dark:bg-gray-800 p-3 rounded border max-h-48 overflow-y-auto">
+                  {aiSummary.summary}
+                </div>
+                
+                {aiSummary.insights.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-medium text-blue-800 dark:text-blue-200 mb-1">Key Insights:</h4>
+                    <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1 max-h-32 overflow-y-auto">
+                      {aiSummary.insights.map((insight, index) => (
+                        <li key={index} className="flex items-start gap-1">
+                          <span className="text-blue-500 mt-0.5">•</span>
+                          <span>{insight}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       
       <div className="flex-1 p-3 overflow-auto event-container">
         {displayEvents.length === 0 ? (

@@ -13,9 +13,9 @@ This file provides guidance to Verdent when working with code in this repository
 4. Development Hints
 
 ## Commands
-- `pnpm dev` - Start development server with WebSocket terminal support (port 3018)
+- `pnpm dev` - Start development server with WebSocket terminal support (port 3017)
 - `pnpm build` - Build for production
-- `pnpm start` - Start production server (port 3018)
+- `pnpm start` - Start production server (port 3017)
 - `pnpm lint` - Run ESLint linting
 - `pnpm type-check` - Run TypeScript type checking
 - `pnpm install` - Auto-builds node-pty native module via postinstall script
@@ -26,7 +26,7 @@ This file provides guidance to Verdent when working with code in this repository
 - **Browser Component**: iframe-based web browser with proxy functionality for CORS handling
 - **Terminal Component**: XTerm.js terminal emulator with session-based command execution
 - **TextDisplay Component**: Real-time browser event monitoring and display system
-- **API Layer**: Two main REST endpoints (`/api/files`, `/api/proxy`) plus WebSocket terminal at `/api/terminal/websocket`
+- **API Layer**: Three main REST endpoints (`/api/files`, `/api/proxy`, `/api/upload`) plus WebSocket terminal at `/api/terminal/websocket`
 - **State Management**: Zustand for browser events, nuqs for tab state persistence
 
 ### Key Data Flows
@@ -34,6 +34,7 @@ This file provides guidance to Verdent when working with code in this repository
 - **Terminal Commands**: XTerm UI → WebSocket `/api/terminal/websocket` → node-pty → Terminal display
 - **Web Proxy**: Browser → `/api/proxy` → External fetch → HTML injection → iframe
 - **File System**: Requests → `/api/files` → Node.js fs operations → JSON response
+- **File Upload**: Drag-and-drop → `/api/upload` → File validation → Disk storage
 
 ### External Dependencies
 - **XTerm.js**: Terminal emulation with VS Code theming
@@ -46,7 +47,7 @@ This file provides guidance to Verdent when working with code in this repository
 ### Development Entry Points
 - Main layout: `app/page.tsx` (responsive layout with mobile tabs/desktop panels)
 - Components: `app/browser.tsx`, `app/terminal.tsx`, `app/text-display.tsx`
-- APIs: `app/api/files/route.ts`, `app/api/proxy/route.ts`, WebSocket terminal in `server.js`
+- APIs: `app/api/files/route.ts`, `app/api/proxy/route.ts`, `app/api/upload/route.ts`, WebSocket terminal in `server.js`
 
 ### Subsystem Relationships
 ```mermaid
@@ -76,8 +77,9 @@ graph TB
 
 ### From package.json & Architecture
 - Project name: "vibe-coding-agent" [inferred: coding environment platform]
-- Uses pnpm workspace configuration
+- **MUST use pnpm** - npm/yarn will break native module compilation
 - React 19.1.0 with Next.js 15.4.5 App Router
+- **Custom server required** - Use `pnpm dev` (not `next dev`) for WebSocket support
 
 ### Security Constraints [inferred]
 - Terminal WebSocket sessions isolated by session ID
@@ -102,13 +104,18 @@ graph TB
 ### Extending Subsystems
 - **Browser**: Modify `app/browser.tsx` and proxy API for new navigation features
 - **Terminal**: Extend `app/terminal.tsx` and WebSocket handling in `server.js` for new command features
-- **Events**: Update Zustand store in `store/browser-events.ts` for new event types
+- **Events**: Update Zustand store in `store/events.ts` for new event types
 - **UI Components**: Follow Radix UI + Tailwind patterns in `components/ui/`
 - **File Operations**: Extend `/api/files` route for new file system capabilities
 
 ### Component Development
 - Follow existing component structure in `components/` directory
-- Use Radix UI primitives for accessibility
+- Use Radix UI primitives for accessibility (shadcn/ui "new-york" style)
 - Implement responsive design with mobile tabs and desktop panels
 - Use Tailwind CSS with established design system
 - For terminal features, reference XTerm.js documentation and existing VS Code theme implementation
+
+### Testing & Validation
+- No automated testing framework - manual testing required
+- Use `TEST_CASES.md` for comprehensive testing checklist
+- Run `pnpm lint` and `pnpm type-check` before changes

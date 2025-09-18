@@ -13,7 +13,7 @@ interface BrowserProps {
 }
 
 export function Browser({ className, startUrl }: BrowserProps) {
-  const defaultUrl = startUrl || 'https://example.com'
+  const defaultUrl = startUrl || process.env.NEXT_PUBLIC_DEFAULT_BROWSER_URL || 'https://example.com'
   const [url, setUrl] = useState(defaultUrl)
   const [displayUrl, setDisplayUrl] = useState(defaultUrl)
   const [isLoading, setIsLoading] = useState(false)

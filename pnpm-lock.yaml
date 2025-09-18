@@ -74,6 +74,9 @@ importers:
       nuqs:
         specifier: 2.4.3
         version: 2.4.3(next@15.4.5(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)
+      openai:
+        specifier: ^5.21.0
+        version: 5.21.0(ws@8.18.3)(zod@3.25.76)
       react:
         specifier: 19.1.0
         version: 19.1.0
@@ -1581,6 +1584,18 @@ packages:
       react-router:
         optional: true
       react-router-dom:
+        optional: true
+
+  openai@5.21.0:
+    resolution: {integrity: sha512-E9LuV51vgvwbahPJaZu2x4V6SWMq9g3X6Bj2/wnFiNfV7lmAxYVxPxcQNZqCWbAVMaEoers9HzIxpOp6Vvgn8w==}
+    hasBin: true
+    peerDependencies:
+      ws: ^8.18.0
+      zod: ^3.23.8
+    peerDependenciesMeta:
+      ws:
+        optional: true
+      zod:
         optional: true
 
   optionator@0.9.4:
@@ -3309,6 +3324,11 @@ snapshots:
       react: 19.1.0
     optionalDependencies:
       next: 15.4.5(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+
+  openai@5.21.0(ws@8.18.3)(zod@3.25.76):
+    optionalDependencies:
+      ws: 8.18.3
+      zod: 3.25.76
 
   optionator@0.9.4:
     dependencies:

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node server.js",
     "build": "next build",
-    "start": "next start -p 3018",
+    "start": "next start -p 3017",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "postinstall": "node scripts/postinstall.js"
@@ -34,6 +34,7 @@
     "node-gyp": "^11.4.2",
     "node-pty": "^1.0.0",
     "nuqs": "2.4.3",
+    "openai": "^5.21.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-resizable-panels": "3.0.4",
