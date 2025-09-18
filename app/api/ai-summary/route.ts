@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { OpenAI } from 'openai'
+import fetch from 'node-fetch'
 
+// Use node-fetch for better compatibility
 const client = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
   baseURL: process.env.OPENROUTER_BASE_URL,
+  fetch: fetch as any, // Use node-fetch instead of native fetch
 })
 
 interface Event {
@@ -32,6 +35,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'OpenRouter API key not configured. Please set OPENROUTER_API_KEY in environment variables.' },
         { status: 500 }
+      )
+    }
+
+    // Check if AI is enabled (for testing purposes)
+    if (process.env.ENABLE_AI_SUMMARY === 'false') {
+      return NextResponse.json(
+        { error: 'AI Summary is currently disabled. Set ENABLE_AI_SUMMARY=true to enable.' },
+        { status: 503 }
       )
     }
 
@@ -142,53 +153,68 @@ export async function POST(request: NextRequest) {
       content: userContent
     })
 
-    // Call OpenRouter API
-    const response = await client.chat.completions.create({
-      model: process.env.OPENROUTER_MODEL || "google/gemini-2.5-pro",
-      messages: messages,
-      max_tokens: parseInt(process.env.OPENROUTER_MAX_TOKENS || '1000'),
-      temperature: parseFloat(process.env.OPENROUTER_TEMPERATURE || '0.7'),
-    })
+    // Call OpenRouter API with direct HTTP
+    try {
+      const response = await fetch(`${process.env.OPENROUTER_BASE_URL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          'User-Agent': 'AI-Summary/1.0',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          model: process.env.OPENROUTER_MODEL || "google/gemini-2.5-pro",
+          messages: messages,
+          max_tokens: parseInt(process.env.OPENROUTER_MAX_TOKENS || '1000'),
+          temperature: parseFloat(process.env.OPENROUTER_TEMPERATURE || '0.7'),
+        }),
+        timeout: 30000, // 30 second timeout
+      })
 
-    const summary = response.choices[0]?.message?.content || "Unable to generate summary"
-
-    // Extract insights from the summary (simple extraction based on structure)
-    const insights: string[] = []
-    const lines = summary.split('\n').filter(line => line.trim())
-    
-    // Look for bullet points or numbered items as insights
-    lines.forEach((line: string) => {
-      if (line.match(/^[\d\-\*\•].+/) || line.includes('insight') || line.includes('pattern')) {
-        insights.push(line.trim())
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`API Error ${response.status}: ${errorText}`)
       }
-    })
 
-    return NextResponse.json({
-      summary,
-      insights: insights.slice(0, 5), // Limit to 5 key insights
-      eventCount: filteredEvents.length,
-      includeImages: includeImages && eventType !== 'terminal' && eventType !== 'file'
-    })
+      const data = await response.json()
+      const summary = data.choices[0]?.message?.content || "Unable to generate summary"
+
+      // Extract insights from the summary (simple extraction based on structure)
+      const insights: string[] = []
+      const lines = summary.split('\n').filter(line => line.trim())
+      
+      // Look for bullet points or numbered items as insights
+      lines.forEach((line: string) => {
+        if (line.match(/^[\d\-\*\•].+/) || line.includes('insight') || line.includes('pattern')) {
+          insights.push(line.trim())
+        }
+      })
+
+      return NextResponse.json({
+        summary,
+        insights: insights.slice(0, 5), // Limit to 5 key insights
+        eventCount: filteredEvents.length,
+        includeImages: includeImages && eventType !== 'terminal' && eventType !== 'file'
+      })
+
+    } catch (apiError: any) {
+      console.warn('OpenRouter API failed:', apiError.message)
+      
+      // Provide helpful error message for network issues
+      if (apiError.code === 'ETIMEDOUT' || apiError.message?.includes('timeout')) {
+        throw new Error(`Network timeout: Unable to connect to AI service. This may be due to network configuration or firewall settings.`)
+      } else {
+        throw new Error(`Network error: ${apiError.message}`)
+      }
+    }
 
   } catch (error: any) {
     console.error('AI Summary API Error:', error)
     
-    // Return more specific error messages
-    if (error.code === 'insufficient_quota') {
-      return NextResponse.json(
-        { error: 'API quota exceeded. Please try again later.' },
-        { status: 429 }
-      )
-    } else if (error.code === 'invalid_request_error') {
-      return NextResponse.json(
-        { error: 'Invalid request. Please check your input.' },
-        { status: 400 }
-      )
-    } else {
-      return NextResponse.json(
-        { error: 'Failed to generate AI summary. Please try again.' },
-        { status: 500 }
-      )
-    }
+    return NextResponse.json(
+      { error: error.message || 'Failed to generate AI summary.' },
+      { status: 500 }
+    )
   }
 }
