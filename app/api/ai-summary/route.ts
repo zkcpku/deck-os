@@ -1,13 +1,101 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { OpenAI } from 'openai'
 import fetch from 'node-fetch'
+import { HttpsProxyAgent } from 'https-proxy-agent'
 
-// Use node-fetch for better compatibility
-const client = new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: process.env.OPENROUTER_BASE_URL,
-  fetch: fetch as any, // Use node-fetch instead of native fetch
-})
+// Create intelligent proxy-aware fetch function with fallback
+function createIntelligentFetch() {
+  const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.VERDENT_LLM_PROXY
+  
+  // Function to try proxy connection
+  const createProxyFetch = () => {
+    if (!proxyUrl) return null
+    
+    try {
+      const agent = new HttpsProxyAgent(proxyUrl, {
+        rejectUnauthorized: false,
+        timeout: 15000, // Shorter timeout for proxy detection
+      })
+      
+      return (url: string, options: any = {}) => {
+        return fetch(url, {
+          ...options,
+          agent,
+          timeout: 15000,
+          headers: {
+            ...options.headers,
+            'User-Agent': 'AI-Summary/1.0',
+          }
+        })
+      }
+    } catch (error) {
+      console.warn('Failed to create proxy agent:', error)
+      return null
+    }
+  }
+  
+  // Function for direct connection
+  const createDirectFetch = () => {
+    return (url: string, options: any = {}) => {
+      // Temporarily clear proxy environment variables for direct connection
+      const originalHttpsProxy = process.env.HTTPS_PROXY
+      const originalHttpProxy = process.env.HTTP_PROXY
+      
+      delete process.env.HTTPS_PROXY
+      delete process.env.HTTP_PROXY
+      
+      const result = fetch(url, {
+        ...options,
+        timeout: 30000,
+        headers: {
+          ...options.headers,
+          'User-Agent': 'AI-Summary/1.0',
+        }
+      })
+      
+      // Restore proxy environment variables
+      if (originalHttpsProxy) process.env.HTTPS_PROXY = originalHttpsProxy
+      if (originalHttpProxy) process.env.HTTP_PROXY = originalHttpProxy
+      
+      return result
+    }
+  }
+  
+  const proxyFetch = createProxyFetch()
+  const directFetch = createDirectFetch()
+  
+  // Return intelligent fetch function with fallback
+  return async (url: string, options: any = {}) => {
+    // If proxy is configured, try proxy first
+    if (proxyFetch && proxyUrl) {
+      console.log('Attempting proxy connection to:', url)
+      try {
+        const response = await proxyFetch(url, options)
+        
+        // Check if we got a CloudFront error (common with corporate proxies)
+        if (!response.ok) {
+          const text = await response.text()
+          if (text.includes('CloudFront') || text.includes('Bad request') || response.status === 400) {
+            console.warn('Proxy blocked by CloudFront/Firewall, falling back to direct connection')
+            throw new Error('Proxy blocked')
+          }
+        }
+        
+        console.log('Proxy connection successful')
+        return response
+      } catch (error: any) {
+        console.warn('Proxy failed:', error.message)
+        console.log('Attempting direct connection fallback...')
+      }
+    }
+    
+    // Fallback to direct connection
+    console.log('Using direct connection to:', url)
+    return directFetch(url, options)
+  }
+}
+
+const intelligentFetch = createIntelligentFetch()
 
 interface Event {
   id: string
@@ -42,6 +130,20 @@ export async function POST(request: NextRequest) {
     if (process.env.ENABLE_AI_SUMMARY === 'false') {
       return NextResponse.json(
         { error: 'AI Summary is currently disabled. Set ENABLE_AI_SUMMARY=true to enable.' },
+        { status: 503 }
+      )
+    }
+
+    // Check for VPN environment and warn user
+    const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.VERDENT_LLM_PROXY
+    if (proxyUrl) {
+      console.log('VPN/Proxy environment detected:', proxyUrl)
+      return NextResponse.json(
+        { 
+          error: 'AI Summary is currently unavailable in VPN environment. Please disable VPN (如飞连) and try again.',
+          vpnDetected: true,
+          proxy: proxyUrl
+        },
         { status: 503 }
       )
     }
@@ -153,9 +255,9 @@ export async function POST(request: NextRequest) {
       content: userContent
     })
 
-    // Call OpenRouter API with direct HTTP
+    // Call OpenRouter API with intelligent proxy fallback
     try {
-      const response = await fetch(`${process.env.OPENROUTER_BASE_URL}/chat/completions`, {
+      const response = await intelligentFetch(`${process.env.OPENROUTER_BASE_URL}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -169,7 +271,6 @@ export async function POST(request: NextRequest) {
           max_tokens: parseInt(process.env.OPENROUTER_MAX_TOKENS || '1000'),
           temperature: parseFloat(process.env.OPENROUTER_TEMPERATURE || '0.7'),
         }),
-        timeout: 30000, // 30 second timeout
       })
 
       if (!response.ok) {
@@ -199,14 +300,24 @@ export async function POST(request: NextRequest) {
       })
 
     } catch (apiError: any) {
-      console.warn('OpenRouter API failed:', apiError.message)
+      console.error('OpenRouter API failed - Full error details:')
+      console.error('Error type:', typeof apiError)
+      console.error('Error message:', apiError.message)
+      console.error('Error code:', apiError.code)
+      console.error('Error stack:', apiError.stack)
       
-      // Provide helpful error message for network issues
-      if (apiError.code === 'ETIMEDOUT' || apiError.message?.includes('timeout')) {
-        throw new Error(`Network timeout: Unable to connect to AI service. This may be due to network configuration or firewall settings.`)
-      } else {
-        throw new Error(`Network error: ${apiError.message}`)
+      // Check if it's a network-related error
+      if (apiError.code === 'ECONNREFUSED' || 
+          apiError.code === 'ETIMEDOUT' || 
+          apiError.code === 'ENOTFOUND' ||
+          apiError.message?.includes('getaddrinfo') ||
+          apiError.message?.includes('timeout') ||
+          apiError.message?.includes('network')) {
+        console.error('Network error detected - likely VPN/proxy issue')
       }
+      
+      // Simple network error message as requested
+      throw new Error('Network error')
     }
 
   } catch (error: any) {
